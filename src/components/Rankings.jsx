@@ -12,7 +12,7 @@ const PERIODS = [
 
 const CATEGORIES = [
   { key: 'goals', label: 'Gols', icon: Target, color: 'text-green-400' },
-  { key: 'assists', label: 'Assistencias', icon: HandHelping, color: 'text-blue-400' },
+  { key: 'assists', label: 'Assist.', icon: HandHelping, color: 'text-blue-400' },
   { key: 'presences', label: 'Presencas', icon: Award, color: 'text-yellow-400' },
 ]
 
@@ -34,7 +34,6 @@ export default function Rankings() {
       startDate.setDate(startDate.getDate() - selectedPeriod.days)
       const startDateStr = startDate.toISOString().split('T')[0]
 
-      // Buscar matches no periodo
       const { data: matches } = await supabase
         .from('matches')
         .select('id')
@@ -49,10 +48,9 @@ export default function Rankings() {
 
       const matchIds = matches.map(m => m.id)
 
-      // Buscar stats
       const { data: stats } = await supabase
         .from('match_stats')
-        .select('goals, assists, present, player_id, players(name, nickname)')
+        .select('goals, assists, present, player_id, players(name, nickname, position, shirt_number)')
         .in('match_id', matchIds)
 
       if (!stats) {
@@ -61,12 +59,13 @@ export default function Rankings() {
         return
       }
 
-      // Agregar por jogador
       const playerMap = {}
       stats.forEach(s => {
         if (!playerMap[s.player_id]) {
           playerMap[s.player_id] = {
             name: s.players?.nickname || s.players?.name || 'Jogador',
+            position: s.players?.position || '',
+            number: s.players?.shirt_number,
             goals: 0,
             assists: 0,
             presences: 0
@@ -88,8 +87,8 @@ export default function Rankings() {
     setLoading(false)
   }
 
-  const CategoryIcon = CATEGORIES.find(c => c.key === category)?.icon || Trophy
   const categoryColor = CATEGORIES.find(c => c.key === category)?.color || 'text-green-400'
+  const positionLabels = { goleiro: 'GOL', zagueiro: 'ZAG', meia: 'MEI', atacante: 'ATA' }
 
   return (
     <div className="space-y-4">
@@ -136,7 +135,7 @@ export default function Rankings() {
         })}
       </div>
 
-      {/* Tabela de ranking */}
+      {/* Lista */}
       {loading ? (
         <div className="text-center py-8 text-slate-400">Carregando...</div>
       ) : rankings.length === 0 ? (
@@ -146,14 +145,8 @@ export default function Rankings() {
         </div>
       ) : (
         <div className="bg-slate-800 rounded-2xl overflow-hidden">
-          {rankings.map((player, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-4 py-3 border-b border-slate-700 last:border-0 ${
-                i < 3 ? 'bg-slate-750' : ''
-              }`}
-            >
-              {/* Posicao */}
+          {rankings.map((p, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-slate-700 last:border-0">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                 i === 0 ? 'bg-yellow-500/20 text-yellow-400' :
                 i === 1 ? 'bg-slate-400/20 text-slate-300' :
@@ -162,15 +155,16 @@ export default function Rankings() {
               }`}>
                 {i + 1}
               </div>
-
-              {/* Nome */}
-              <div className="flex-1">
-                <p className="text-white text-sm font-medium">{player.name}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium truncate">
+                  {p.number ? `${p.number}. ` : ''}{p.name}
+                </p>
+                {p.position && (
+                  <span className="text-xs text-slate-500">{positionLabels[p.position] || p.position}</span>
+                )}
               </div>
-
-              {/* Valor */}
               <div className={`text-lg font-bold ${categoryColor}`}>
-                {player[category]}
+                {p[category]}
               </div>
             </div>
           ))}

@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../App'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { Target, HandHelping, Users, Calendar } from 'lucide-react'
-
-const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Target, HandHelping, Users, Calendar, TrendingUp } from 'lucide-react'
 
 export default function Home() {
-  const { player } = useAuth()
-  const [stats, setStats] = useState(null)
   const [topScorers, setTopScorers] = useState([])
+  const [topAssists, setTopAssists] = useState([])
+  const [generalStats, setGeneralStats] = useState({ totalMatches: 0, totalPlayers: 0, totalGoals: 0 })
+  const [nextMatch, setNextMatch] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -18,46 +16,69 @@ export default function Home() {
 
   async function loadDashboard() {
     try {
-      // Stats do jogador logado
-      const { data: myStats } = await supabase
-        .from('match_stats')
-        .select('goals, assists, present')
-        .eq('player_id', player.id)
+      // Proximo racha aberto
+      const { data: openMatches } = await supabase
+        .from('matches')
+        .select('*, confirmations(count)')
+        .in('status', ['open', 'sorted'])
+        .order('date', { ascending: true })
+        .limit(1)
 
-      const totalGoals = myStats?.reduce((s, m) => s + m.goals, 0) || 0
-      const totalAssists = myStats?.reduce((s, m) => s + m.assists, 0) || 0
-      const totalPresences = myStats?.filter(m => m.present).length || 0
+      if (openMatches && openMatches.length > 0) {
+        const m = openMatches[0]
+        const { count } = await supabase
+          .from('confirmations')
+          .select('*', { count: 'exact', head: true })
+          .eq('match_id', m.id)
+          .eq('status', 'confirmed')
+        setNextMatch({ ...m, confirmedCount: count || 0 })
+      }
 
-      // Total de rachas
+      // Stats gerais
       const { count: totalMatches } = await supabase
         .from('matches')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'finished')
 
-      setStats({ totalGoals, totalAssists, totalPresences, totalMatches: totalMatches || 0 })
+      const { count: totalPlayers } = await supabase
+        .from('players')
+        .select('*', { count: 'exact', head: true })
+        .eq('active', true)
 
-      // Top 5 artilheiros geral
+      // Todos os stats
       const { data: allStats } = await supabase
         .from('match_stats')
-        .select('goals, player_id, players(name, nickname)')
+        .select('goals, assists, player_id, players(name, nickname)')
+
+      let totalGoals = 0
+      const playerGoals = {}
+      const playerAssists = {}
 
       if (allStats) {
-        const playerGoals = {}
         allStats.forEach(s => {
-          const key = s.player_id
-          if (!playerGoals[key]) {
-            playerGoals[key] = {
-              name: s.players?.nickname || s.players?.name || 'Jogador',
-              goals: 0
-            }
-          }
-          playerGoals[key].goals += s.goals
+          totalGoals += s.goals
+          const pName = s.players?.nickname || s.players?.name || 'Jogador'
+
+          if (!playerGoals[s.player_id]) playerGoals[s.player_id] = { name: pName, value: 0 }
+          playerGoals[s.player_id].value += s.goals
+
+          if (!playerAssists[s.player_id]) playerAssists[s.player_id] = { name: pName, value: 0 }
+          playerAssists[s.player_id].value += s.assists
         })
-        const sorted = Object.values(playerGoals)
-          .sort((a, b) => b.goals - a.goals)
-          .slice(0, 5)
-        setTopScorers(sorted)
       }
+
+      setGeneralStats({
+        totalMatches: totalMatches || 0,
+        totalPlayers: totalPlayers || 0,
+        totalGoals
+      })
+
+      setTopScorers(
+        Object.values(playerGoals).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5)
+      )
+      setTopAssists(
+        Object.values(playerAssists).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5)
+      )
     } catch (err) {
       console.error(err)
     }
@@ -69,27 +90,46 @@ export default function Home() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Saudacao */}
+    <div className="space-y-5">
+      {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-white">
-          Fala, {player.nickname || player.name?.split(' ')[0]}! 👋
-        </h2>
-        <p className="text-slate-400 text-sm mt-1">Seus numeros no Racha Da Santa</p>
+        <h2 className="text-xl font-bold text-white">Dashboard</h2>
+        <p className="text-slate-400 text-sm mt-1">Numeros gerais do Racha Da Santa</p>
       </div>
+
+      {/* Proximo racha */}
+      {nextMatch && (
+        <div className="bg-gradient-to-r from-green-900/40 to-green-800/20 border border-green-700/30 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar size={16} className="text-green-400" />
+            <span className="text-xs text-green-400 font-semibold uppercase">Proximo Racha</span>
+          </div>
+          <p className="text-white font-bold capitalize">
+            {new Date(nextMatch.date + 'T12:00:00').toLocaleDateString('pt-BR', {
+              weekday: 'long', day: '2-digit', month: 'long'
+            })}
+          </p>
+          <p className="text-green-300 text-sm mt-1">
+            {nextMatch.confirmedCount} confirmado{nextMatch.confirmedCount !== 1 ? 's' : ''}
+          </p>
+          {nextMatch.notes && <p className="text-slate-400 text-xs mt-1">{nextMatch.notes}</p>}
+        </div>
+      )}
 
       {/* Cards de resumo */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard icon={Target} label="Gols" value={stats?.totalGoals || 0} color="text-green-400" />
-        <StatCard icon={HandHelping} label="Assistencias" value={stats?.totalAssists || 0} color="text-blue-400" />
-        <StatCard icon={Calendar} label="Presencas" value={stats?.totalPresences || 0} color="text-yellow-400" />
-        <StatCard icon={Users} label="Rachas jogados" value={stats?.totalMatches || 0} color="text-purple-400" />
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard icon={Calendar} label="Rachas" value={generalStats.totalMatches} color="text-green-400" />
+        <StatCard icon={Users} label="Jogadores" value={generalStats.totalPlayers} color="text-blue-400" />
+        <StatCard icon={Target} label="Gols total" value={generalStats.totalGoals} color="text-yellow-400" />
       </div>
 
-      {/* Grafico de artilheiros */}
+      {/* Grafico artilheiros */}
       {topScorers.length > 0 && (
         <div className="bg-slate-800 rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-slate-300 mb-4">Top 5 Artilheiros</h3>
+          <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <Target size={14} className="text-green-400" />
+            Top Artilheiros
+          </h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={topScorers} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -99,40 +139,31 @@ export default function Home() {
                 contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                 labelStyle={{ color: '#e2e8f0' }}
               />
-              <Bar dataKey="goals" fill="#22c55e" radius={[0, 4, 4, 0]} name="Gols" />
+              <Bar dataKey="value" fill="#22c55e" radius={[0, 4, 4, 0]} name="Gols" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* Grafico de pizza: participacao */}
-      {stats && stats.totalMatches > 0 && (
+      {/* Grafico assistencias */}
+      {topAssists.length > 0 && (
         <div className="bg-slate-800 rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-slate-300 mb-4">Sua presenca nos rachas</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'Presente', value: stats.totalPresences },
-                  { name: 'Ausente', value: stats.totalMatches - stats.totalPresences }
-                ]}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={70}
-                dataKey="value"
-              >
-                <Cell fill="#22c55e" />
-                <Cell fill="#334155" />
-              </Pie>
+          <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <HandHelping size={14} className="text-blue-400" />
+            Top Assistencias
+          </h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={topAssists} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis type="number" stroke="#94a3b8" />
+              <YAxis type="category" dataKey="name" stroke="#94a3b8" width={80} tick={{ fontSize: 12 }} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                labelStyle={{ color: '#e2e8f0' }}
               />
-            </PieChart>
+              <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Assist." />
+            </BarChart>
           </ResponsiveContainer>
-          <p className="text-center text-slate-400 text-sm">
-            {stats.totalPresences} de {stats.totalMatches} rachas ({stats.totalMatches > 0 ? Math.round((stats.totalPresences / stats.totalMatches) * 100) : 0}%)
-          </p>
         </div>
       )}
 
@@ -149,12 +180,10 @@ export default function Home() {
 
 function StatCard({ icon: Icon, label, value, color }) {
   return (
-    <div className="bg-slate-800 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Icon size={16} className={color} />
-        <span className="text-xs text-slate-400">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
+    <div className="bg-slate-800 rounded-xl p-3 text-center">
+      <Icon size={18} className={`${color} mx-auto mb-1`} />
+      <p className="text-xl font-bold text-white">{value}</p>
+      <p className="text-xs text-slate-400">{label}</p>
     </div>
   )
 }

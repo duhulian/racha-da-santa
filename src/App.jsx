@@ -1,13 +1,13 @@
 import { useState, useEffect, createContext, useContext } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import Login from './components/Login'
 import Layout from './components/Layout'
 import Home from './components/Home'
-import MatchDay from './components/MatchDay'
 import Rankings from './components/Rankings'
+import Confirm from './components/Confirm'
+import AdminLogin from './components/AdminLogin'
 import Admin from './components/Admin'
-import Profile from './components/Profile'
+import Players from './components/Players'
 
 const AuthContext = createContext()
 
@@ -53,34 +53,23 @@ export default function App() {
     if (session) await loadPlayer(session.user.id)
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-center">
-          <div className="text-4xl mb-4">⚽</div>
-          <p className="text-slate-400">Carregando...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!session) {
-    return <Login />
-  }
-
-  if (!player) {
-    return <Login session={session} onPlayerCreated={refreshPlayer} needsProfile />
-  }
+  const isAdmin = player?.role === 'admin'
 
   return (
-    <AuthContext.Provider value={{ session, player, refreshPlayer, isAdmin: player.role === 'admin' }}>
+    <AuthContext.Provider value={{ session, player, refreshPlayer, isAdmin, loading }}>
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/racha" element={<MatchDay />} />
           <Route path="/rankings" element={<Rankings />} />
-          <Route path="/admin" element={player.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-          <Route path="/perfil" element={<Profile />} />
+          <Route path="/confirmar/:token" element={<Confirm />} />
+          <Route path="/jogadores" element={<Players />} />
+          <Route path="/admin/login" element={
+            isAdmin ? <Navigate to="/admin" /> : <AdminLogin onLogin={refreshPlayer} />
+          } />
+          <Route path="/admin" element={
+            loading ? <div className="text-center py-8 text-slate-400">Carregando...</div> :
+            isAdmin ? <Admin /> : <Navigate to="/admin/login" />
+          } />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>
