@@ -8,23 +8,22 @@ export default function Layout({ children }) {
   const navigate = useNavigate()
   const { isAdmin, session } = useAuth()
 
-  // Nao mostrar nav na pagina de confirmacao
   const isConfirmPage = location.pathname.startsWith('/confirmar/')
 
   const tabs = [
     { path: '/', icon: Home, label: 'Inicio' },
     { path: '/rankings', icon: Trophy, label: 'Rankings' },
-    { path: '/jogadores', icon: Users, label: 'Jogadores' },
+    { path: '/jogadores', icon: Users, label: 'Elenco' },
     ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
   ]
 
   return (
-    <div className="min-h-screen bg-slate-900 pb-20">
+    <div className="min-h-screen bg-navy-900 pb-20">
       {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-4 py-3 sticky top-0 z-40">
+      <header className="bg-navy-800 border-b border-navy-700 px-4 py-2.5 sticky top-0 z-40">
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <span className="text-2xl">⚽</span>
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate('/')}>
+            <img src="/logo.png" alt="Racha Da Santa" className="w-9 h-9 rounded-full object-cover" />
             <h1 className="text-lg font-bold text-white">Racha Da Santa</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -34,7 +33,7 @@ export default function Layout({ children }) {
                   await supabase.auth.signOut()
                   navigate('/')
                 }}
-                className="text-slate-500 hover:text-slate-300 p-1.5"
+                className="text-slate-500 hover:text-gold-400 p-1.5 transition"
                 title="Sair do admin"
               >
                 <LogOut size={18} />
@@ -43,7 +42,7 @@ export default function Layout({ children }) {
             {!isAdmin && !session && (
               <button
                 onClick={() => navigate('/admin/login')}
-                className="text-slate-600 hover:text-slate-400 text-xs"
+                className="text-navy-600 hover:text-gold-400 text-xs transition"
               >
                 Admin
               </button>
@@ -59,7 +58,7 @@ export default function Layout({ children }) {
 
       {/* Navegacao inferior */}
       {!isConfirmPage && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 z-50">
+        <nav className="fixed bottom-0 left-0 right-0 bg-navy-800 border-t border-navy-700 z-50">
           <div className="max-w-lg mx-auto flex">
             {tabs.map((tab) => {
               const isActive = location.pathname === tab.path
@@ -69,7 +68,7 @@ export default function Layout({ children }) {
                   key={tab.path}
                   onClick={() => navigate(tab.path)}
                   className={`flex-1 flex flex-col items-center py-2 pt-3 transition ${
-                    isActive ? 'text-green-400' : 'text-slate-500 hover:text-slate-300'
+                    isActive ? 'text-gold-400' : 'text-slate-500 hover:text-slate-300'
                   }`}
                 >
                   <Icon size={20} />

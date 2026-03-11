@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Target, HandHelping, Users, Calendar, TrendingUp } from 'lucide-react'
+import { Target, HandHelping, Users, Calendar } from 'lucide-react'
 
 export default function Home() {
   const [topScorers, setTopScorers] = useState([])
@@ -16,10 +16,9 @@ export default function Home() {
 
   async function loadDashboard() {
     try {
-      // Proximo racha aberto
       const { data: openMatches } = await supabase
         .from('matches')
-        .select('*, confirmations(count)')
+        .select('*')
         .in('status', ['open', 'sorted'])
         .order('date', { ascending: true })
         .limit(1)
@@ -34,21 +33,14 @@ export default function Home() {
         setNextMatch({ ...m, confirmedCount: count || 0 })
       }
 
-      // Stats gerais
       const { count: totalMatches } = await supabase
-        .from('matches')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'finished')
+        .from('matches').select('*', { count: 'exact', head: true }).eq('status', 'finished')
 
       const { count: totalPlayers } = await supabase
-        .from('players')
-        .select('*', { count: 'exact', head: true })
-        .eq('active', true)
+        .from('players').select('*', { count: 'exact', head: true }).eq('active', true)
 
-      // Todos os stats
       const { data: allStats } = await supabase
-        .from('match_stats')
-        .select('goals, assists, player_id, players(name, nickname)')
+        .from('match_stats').select('goals, assists, player_id, players(name, nickname)')
 
       let totalGoals = 0
       const playerGoals = {}
@@ -58,27 +50,16 @@ export default function Home() {
         allStats.forEach(s => {
           totalGoals += s.goals
           const pName = s.players?.nickname || s.players?.name || 'Jogador'
-
           if (!playerGoals[s.player_id]) playerGoals[s.player_id] = { name: pName, value: 0 }
           playerGoals[s.player_id].value += s.goals
-
           if (!playerAssists[s.player_id]) playerAssists[s.player_id] = { name: pName, value: 0 }
           playerAssists[s.player_id].value += s.assists
         })
       }
 
-      setGeneralStats({
-        totalMatches: totalMatches || 0,
-        totalPlayers: totalPlayers || 0,
-        totalGoals
-      })
-
-      setTopScorers(
-        Object.values(playerGoals).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5)
-      )
-      setTopAssists(
-        Object.values(playerAssists).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5)
-      )
+      setGeneralStats({ totalMatches: totalMatches || 0, totalPlayers: totalPlayers || 0, totalGoals })
+      setTopScorers(Object.values(playerGoals).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5))
+      setTopAssists(Object.values(playerAssists).sort((a, b) => b.value - a.value).filter(p => p.value > 0).slice(0, 5))
     } catch (err) {
       console.error(err)
     }
@@ -86,30 +67,35 @@ export default function Home() {
   }
 
   if (loading) {
-    return <div className="text-center py-8 text-slate-400">Carregando dashboard...</div>
+    return (
+      <div className="text-center py-12">
+        <img src="/logo.png" alt="Racha Da Santa" className="w-16 h-16 rounded-full mx-auto mb-3 animate-pulse" />
+        <p className="text-slate-400">Carregando dashboard...</p>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold text-white">Dashboard</h2>
-        <p className="text-slate-400 text-sm mt-1">Numeros gerais do Racha Da Santa</p>
+      <div className="text-center">
+        <img src="/logo.png" alt="Racha Da Santa" className="w-20 h-20 rounded-full mx-auto mb-2 border-2 border-gold-400/30" />
+        <h2 className="text-xl font-bold text-white">Racha Da Santa</h2>
+        <p className="text-slate-400 text-sm mt-1">Dashboard geral</p>
       </div>
 
       {/* Proximo racha */}
       {nextMatch && (
-        <div className="bg-gradient-to-r from-green-900/40 to-green-800/20 border border-green-700/30 rounded-2xl p-4">
+        <div className="bg-gradient-to-r from-navy-700 to-navy-800 border border-gold-400/20 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-1">
-            <Calendar size={16} className="text-green-400" />
-            <span className="text-xs text-green-400 font-semibold uppercase">Proximo Racha</span>
+            <Calendar size={16} className="text-gold-400" />
+            <span className="text-xs text-gold-400 font-semibold uppercase">Proximo Racha</span>
           </div>
           <p className="text-white font-bold capitalize">
             {new Date(nextMatch.date + 'T12:00:00').toLocaleDateString('pt-BR', {
               weekday: 'long', day: '2-digit', month: 'long'
             })}
           </p>
-          <p className="text-green-300 text-sm mt-1">
+          <p className="text-gold-300 text-sm mt-1">
             {nextMatch.confirmedCount} confirmado{nextMatch.confirmedCount !== 1 ? 's' : ''}
           </p>
           {nextMatch.notes && <p className="text-slate-400 text-xs mt-1">{nextMatch.notes}</p>}
@@ -118,28 +104,25 @@ export default function Home() {
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={Calendar} label="Rachas" value={generalStats.totalMatches} color="text-green-400" />
+        <StatCard icon={Calendar} label="Rachas" value={generalStats.totalMatches} color="text-gold-400" />
         <StatCard icon={Users} label="Jogadores" value={generalStats.totalPlayers} color="text-blue-400" />
-        <StatCard icon={Target} label="Gols total" value={generalStats.totalGoals} color="text-yellow-400" />
+        <StatCard icon={Target} label="Gols total" value={generalStats.totalGoals} color="text-green-400" />
       </div>
 
       {/* Grafico artilheiros */}
       {topScorers.length > 0 && (
-        <div className="bg-slate-800 rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <Target size={14} className="text-green-400" />
+        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+          <h3 className="text-sm font-semibold text-gold-400 mb-4 flex items-center gap-2">
+            <Target size={14} />
             Top Artilheiros
           </h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={topScorers} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" stroke="#94a3b8" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#152546" />
+              <XAxis type="number" stroke="#64748b" />
               <YAxis type="category" dataKey="name" stroke="#94a3b8" width={80} tick={{ fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                labelStyle={{ color: '#e2e8f0' }}
-              />
-              <Bar dataKey="value" fill="#22c55e" radius={[0, 4, 4, 0]} name="Gols" />
+              <Tooltip contentStyle={{ backgroundColor: '#111d38', border: '1px solid #1a2f5a', borderRadius: '8px', color: '#e2e8f0' }} />
+              <Bar dataKey="value" fill="#c9a84c" radius={[0, 4, 4, 0]} name="Gols" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -147,20 +130,17 @@ export default function Home() {
 
       {/* Grafico assistencias */}
       {topAssists.length > 0 && (
-        <div className="bg-slate-800 rounded-2xl p-4">
-          <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <HandHelping size={14} className="text-blue-400" />
+        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+          <h3 className="text-sm font-semibold text-blue-400 mb-4 flex items-center gap-2">
+            <HandHelping size={14} />
             Top Assistencias
           </h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={topAssists} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" stroke="#94a3b8" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#152546" />
+              <XAxis type="number" stroke="#64748b" />
               <YAxis type="category" dataKey="name" stroke="#94a3b8" width={80} tick={{ fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                labelStyle={{ color: '#e2e8f0' }}
-              />
+              <Tooltip contentStyle={{ backgroundColor: '#111d38', border: '1px solid #1a2f5a', borderRadius: '8px', color: '#e2e8f0' }} />
               <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Assist." />
             </BarChart>
           </ResponsiveContainer>
@@ -168,7 +148,7 @@ export default function Home() {
       )}
 
       {topScorers.length === 0 && (
-        <div className="bg-slate-800 rounded-2xl p-6 text-center">
+        <div className="bg-navy-800 rounded-2xl p-6 text-center border border-navy-700">
           <div className="text-4xl mb-3">📊</div>
           <p className="text-slate-400">Nenhum racha registrado ainda.</p>
           <p className="text-slate-500 text-sm mt-1">Os graficos aparecem quando o admin registrar os primeiros dados.</p>
@@ -180,7 +160,7 @@ export default function Home() {
 
 function StatCard({ icon: Icon, label, value, color }) {
   return (
-    <div className="bg-slate-800 rounded-xl p-3 text-center">
+    <div className="bg-navy-800 rounded-xl p-3 text-center border border-navy-700">
       <Icon size={18} className={`${color} mx-auto mb-1`} />
       <p className="text-xl font-bold text-white">{value}</p>
       <p className="text-xs text-slate-400">{label}</p>

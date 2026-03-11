@@ -11,9 +11,9 @@ const PERIODS = [
 ]
 
 const CATEGORIES = [
-  { key: 'goals', label: 'Gols', icon: Target, color: 'text-green-400' },
+  { key: 'goals', label: 'Gols', icon: Target, color: 'text-gold-400' },
   { key: 'assists', label: 'Assist.', icon: HandHelping, color: 'text-blue-400' },
-  { key: 'presences', label: 'Presencas', icon: Award, color: 'text-yellow-400' },
+  { key: 'presences', label: 'Presencas', icon: Award, color: 'text-green-400' },
 ]
 
 export default function Rankings() {
@@ -35,29 +35,16 @@ export default function Rankings() {
       const startDateStr = startDate.toISOString().split('T')[0]
 
       const { data: matches } = await supabase
-        .from('matches')
-        .select('id')
-        .eq('status', 'finished')
-        .gte('date', startDateStr)
+        .from('matches').select('id').eq('status', 'finished').gte('date', startDateStr)
 
-      if (!matches || matches.length === 0) {
-        setRankings([])
-        setLoading(false)
-        return
-      }
-
-      const matchIds = matches.map(m => m.id)
+      if (!matches || matches.length === 0) { setRankings([]); setLoading(false); return }
 
       const { data: stats } = await supabase
         .from('match_stats')
         .select('goals, assists, present, player_id, players(name, nickname, position, shirt_number)')
-        .in('match_id', matchIds)
+        .in('match_id', matches.map(m => m.id))
 
-      if (!stats) {
-        setRankings([])
-        setLoading(false)
-        return
-      }
+      if (!stats) { setRankings([]); setLoading(false); return }
 
       const playerMap = {}
       stats.forEach(s => {
@@ -66,9 +53,7 @@ export default function Rankings() {
             name: s.players?.nickname || s.players?.name || 'Jogador',
             position: s.players?.position || '',
             number: s.players?.shirt_number,
-            goals: 0,
-            assists: 0,
-            presences: 0
+            goals: 0, assists: 0, presences: 0
           }
         }
         playerMap[s.player_id].goals += s.goals
@@ -76,58 +61,40 @@ export default function Rankings() {
         if (s.present) playerMap[s.player_id].presences += 1
       })
 
-      const sorted = Object.values(playerMap)
-        .sort((a, b) => b[category] - a[category])
-        .filter(p => p[category] > 0)
-
-      setRankings(sorted)
-    } catch (err) {
-      console.error(err)
-    }
+      setRankings(Object.values(playerMap).sort((a, b) => b[category] - a[category]).filter(p => p[category] > 0))
+    } catch (err) { console.error(err) }
     setLoading(false)
   }
 
-  const categoryColor = CATEGORIES.find(c => c.key === category)?.color || 'text-green-400'
+  const categoryColor = CATEGORIES.find(c => c.key === category)?.color || 'text-gold-400'
   const positionLabels = { goleiro: 'GOL', zagueiro: 'ZAG', meia: 'MEI', atacante: 'ATA' }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Trophy size={20} className="text-yellow-400" />
+        <Trophy size={20} className="text-gold-400" />
         <h2 className="text-lg font-bold text-white">Rankings</h2>
       </div>
 
-      {/* Filtro de periodo */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
         {PERIODS.map(p => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
+          <button key={p.key} onClick={() => setPeriod(p.key)}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-              period === p.key
-                ? 'bg-green-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
+              period === p.key ? 'bg-gold-400 text-navy-900' : 'bg-navy-800 text-slate-400 hover:text-white'
+            }`}>
             {p.label}
           </button>
         ))}
       </div>
 
-      {/* Filtro de categoria */}
       <div className="flex gap-2">
         {CATEGORIES.map(c => {
           const Icon = c.icon
           return (
-            <button
-              key={c.key}
-              onClick={() => setCategory(c.key)}
+            <button key={c.key} onClick={() => setCategory(c.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${
-                category === c.key
-                  ? 'bg-slate-700 text-white'
-                  : 'bg-slate-800 text-slate-500 hover:text-slate-300'
-              }`}
-            >
+                category === c.key ? 'bg-navy-700 text-white border border-gold-400/30' : 'bg-navy-800 text-slate-500 hover:text-slate-300'
+              }`}>
               <Icon size={14} />
               {c.label}
             </button>
@@ -135,23 +102,22 @@ export default function Rankings() {
         })}
       </div>
 
-      {/* Lista */}
       {loading ? (
         <div className="text-center py-8 text-slate-400">Carregando...</div>
       ) : rankings.length === 0 ? (
-        <div className="bg-slate-800 rounded-2xl p-6 text-center">
+        <div className="bg-navy-800 rounded-2xl p-6 text-center border border-navy-700">
           <div className="text-3xl mb-2">🏆</div>
           <p className="text-slate-400 text-sm">Nenhum dado nesse periodo.</p>
         </div>
       ) : (
-        <div className="bg-slate-800 rounded-2xl overflow-hidden">
+        <div className="bg-navy-800 rounded-2xl overflow-hidden border border-navy-700">
           {rankings.map((p, i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-slate-700 last:border-0">
+            <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-navy-700 last:border-0">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                i === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                i === 0 ? 'bg-gold-400/20 text-gold-400' :
                 i === 1 ? 'bg-slate-400/20 text-slate-300' :
                 i === 2 ? 'bg-amber-700/20 text-amber-600' :
-                'bg-slate-700 text-slate-400'
+                'bg-navy-700 text-slate-400'
               }`}>
                 {i + 1}
               </div>
@@ -159,13 +125,9 @@ export default function Rankings() {
                 <p className="text-white text-sm font-medium truncate">
                   {p.number ? `${p.number}. ` : ''}{p.name}
                 </p>
-                {p.position && (
-                  <span className="text-xs text-slate-500">{positionLabels[p.position] || p.position}</span>
-                )}
+                {p.position && <span className="text-xs text-slate-500">{positionLabels[p.position]}</span>}
               </div>
-              <div className={`text-lg font-bold ${categoryColor}`}>
-                {p[category]}
-              </div>
+              <div className={`text-lg font-bold ${categoryColor}`}>{p[category]}</div>
             </div>
           ))}
         </div>
