@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Check, X, UserPlus, Users } from 'lucide-react'
+import { Check, X, UserPlus, Users, Eye } from 'lucide-react'
 
 export default function Confirm() {
   const { token } = useParams()
+  const navigate = useNavigate()
   const [match, setMatch] = useState(null)
   const [mensalistas, setMensalistas] = useState([])
   const [confirmations, setConfirmations] = useState([])
@@ -120,21 +121,13 @@ export default function Confirm() {
     )
   }
 
-  if (match.status === 'finished') {
-    return (
-      <div className="text-center py-12">
-        <div className="text-4xl mb-3">✅</div>
-        <p className="text-white font-bold">Racha finalizado</p>
-        <p className="text-slate-400 text-sm mt-1">Esse racha ja aconteceu.</p>
-      </div>
-    )
-  }
-
   const matchDate = new Date(match.date + 'T12:00:00')
   const formattedDate = matchDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
   const confirmedList = confirmations.filter(c => c.status === 'confirmed')
   const declinedList = confirmations.filter(c => c.status === 'declined')
   const positionLabels = { goleiro: 'GOL', zagueiro: 'ZAG', meia: 'MEI', atacante: 'ATA' }
+
+  const isSortedOrFinished = match.status === 'sorted' || match.status === 'finished'
 
   return (
     <div className="space-y-4">
@@ -146,61 +139,75 @@ export default function Confirm() {
         {match.notes && <p className="text-slate-400 text-sm mt-1">{match.notes}</p>}
       </div>
 
-      {/* Mensalistas */}
-      <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-        <h3 className="text-sm font-semibold text-gold-400 mb-3">Mensalistas</h3>
-        <div className="space-y-2">
-          {mensalistas.map(p => {
-            const conf = confirmations.find(c => c.player_id === p.id)
-            const status = conf?.status || 'pending'
-            const isLoading = actionLoading === p.id
+      {/* Botao ver escalacao e resultados */}
+      {isSortedOrFinished && (
+        <button onClick={() => navigate(`/racha/${match.id}`)}
+          className="w-full bg-gold-400 hover:bg-gold-500 text-navy-900 font-bold py-3 rounded-2xl transition flex items-center justify-center gap-2">
+          <Eye size={18} />
+          {match.status === 'finished' ? 'Ver Escalacao e Resultados' : 'Ver Escalacao dos Times'}
+        </button>
+      )}
 
-            return (
-              <div key={p.id} className="flex items-center gap-2 py-2 border-b border-navy-700/50 last:border-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">
-                    {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.nickname || p.name}
-                  </p>
-                  {p.position && <span className="text-xs text-slate-500">{positionLabels[p.position]}</span>}
-                </div>
-                <div className="flex gap-1.5">
-                  <button onClick={() => toggleConfirmation(p.id, status === 'confirmed' ? 'confirmed' : null)}
-                    disabled={isLoading}
-                    className={`p-2 rounded-lg transition text-sm ${
-                      status === 'confirmed' ? 'bg-green-600 text-white' : 'bg-navy-700 text-slate-400 hover:bg-green-600/20 hover:text-green-400'
-                    }`}>
-                    <Check size={16} />
-                  </button>
-                  <button onClick={() => declinePlayer(p.id)}
-                    disabled={isLoading}
-                    className={`p-2 rounded-lg transition text-sm ${
-                      status === 'declined' ? 'bg-red-600 text-white' : 'bg-navy-700 text-slate-400 hover:bg-red-600/20 hover:text-red-400'
-                    }`}>
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* Confirmacao (so se aberto) */}
+      {match.status === 'open' && (
+        <>
+          {/* Mensalistas */}
+          <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+            <h3 className="text-sm font-semibold text-gold-400 mb-3">Mensalistas</h3>
+            <div className="space-y-2">
+              {mensalistas.map(p => {
+                const conf = confirmations.find(c => c.player_id === p.id)
+                const status = conf?.status || 'pending'
+                const isLoading = actionLoading === p.id
 
-      {/* Avulso */}
-      <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-        <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2">
-          <UserPlus size={14} /> Jogador avulso
-        </h3>
-        <div className="flex gap-2">
-          <input type="text" value={avulsoName} onChange={(e) => setAvulsoName(e.target.value)}
-            placeholder="Digite seu nome"
-            className="flex-1 bg-navy-700 rounded-lg p-2.5 text-white outline-none focus:ring-2 focus:ring-gold-400 text-sm"
-            onKeyDown={(e) => e.key === 'Enter' && addAvulso()} />
-          <button onClick={addAvulso} disabled={actionLoading === 'avulso' || !avulsoName.trim()}
-            className="bg-gold-400 hover:bg-gold-500 text-navy-900 px-4 rounded-lg transition disabled:opacity-50 text-sm font-bold">
-            {actionLoading === 'avulso' ? '...' : 'Confirmar'}
-          </button>
-        </div>
-      </div>
+                return (
+                  <div key={p.id} className="flex items-center gap-2 py-2 border-b border-navy-700/50 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">
+                        {p.shirt_number ? `${p.shirt_number}. ` : ''}{p.nickname || p.name}
+                      </p>
+                      {p.position && <span className="text-xs text-slate-500">{positionLabels[p.position]}</span>}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => toggleConfirmation(p.id, status === 'confirmed' ? 'confirmed' : null)}
+                        disabled={isLoading}
+                        className={`p-2 rounded-lg transition text-sm ${
+                          status === 'confirmed' ? 'bg-green-600 text-white' : 'bg-navy-700 text-slate-400 hover:bg-green-600/20 hover:text-green-400'
+                        }`}>
+                        <Check size={16} />
+                      </button>
+                      <button onClick={() => declinePlayer(p.id)}
+                        disabled={isLoading}
+                        className={`p-2 rounded-lg transition text-sm ${
+                          status === 'declined' ? 'bg-red-600 text-white' : 'bg-navy-700 text-slate-400 hover:bg-red-600/20 hover:text-red-400'
+                        }`}>
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Avulso */}
+          <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+            <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2">
+              <UserPlus size={14} /> Jogador avulso
+            </h3>
+            <div className="flex gap-2">
+              <input type="text" value={avulsoName} onChange={(e) => setAvulsoName(e.target.value)}
+                placeholder="Digite seu nome"
+                className="flex-1 bg-navy-700 rounded-lg p-2.5 text-white outline-none focus:ring-2 focus:ring-gold-400 text-sm"
+                onKeyDown={(e) => e.key === 'Enter' && addAvulso()} />
+              <button onClick={addAvulso} disabled={actionLoading === 'avulso' || !avulsoName.trim()}
+                className="bg-gold-400 hover:bg-gold-500 text-navy-900 px-4 rounded-lg transition disabled:opacity-50 text-sm font-bold">
+                {actionLoading === 'avulso' ? '...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Confirmados */}
       <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">

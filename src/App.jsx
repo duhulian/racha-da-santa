@@ -8,6 +8,8 @@ import Confirm from './components/Confirm'
 import AdminLogin from './components/AdminLogin'
 import Admin from './components/Admin'
 import Players from './components/Players'
+import MatchList from './components/MatchList'
+import MatchDetail from './components/MatchDetail'
 
 const AuthContext = createContext()
 
@@ -61,6 +63,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/rankings" element={<Rankings />} />
+          <Route path="/rachas" element={<MatchList />} />
+          <Route path="/racha/:id" element={<MatchDetail />} />
           <Route path="/confirmar/:token" element={<Confirm />} />
           <Route path="/jogadores" element={<Players />} />
           <Route path="/admin/login" element={

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../App'
-import { Home, Trophy, Users, Shield, LogOut } from 'lucide-react'
+import { Home, Trophy, Users, Shield, LogOut, Calendar } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Layout({ children }) {
@@ -12,6 +12,7 @@ export default function Layout({ children }) {
 
   const tabs = [
     { path: '/', icon: Home, label: 'Inicio' },
+    { path: '/rachas', icon: Calendar, label: 'Rachas' },
     { path: '/rankings', icon: Trophy, label: 'Rankings' },
     { path: '/jogadores', icon: Users, label: 'Elenco' },
     ...(isAdmin ? [{ path: '/admin', icon: Shield, label: 'Admin' }] : []),
@@ -61,7 +62,9 @@ export default function Layout({ children }) {
         <nav className="fixed bottom-0 left-0 right-0 bg-navy-800 border-t border-navy-700 z-50">
           <div className="max-w-lg mx-auto flex">
             {tabs.map((tab) => {
-              const isActive = location.pathname === tab.path
+              const isActive = tab.path === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(tab.path) || (tab.path === '/rachas' && location.pathname.startsWith('/racha/'))
               const Icon = tab.icon
               return (
                 <button
