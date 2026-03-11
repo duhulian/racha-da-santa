@@ -441,22 +441,36 @@ function PlayersTab({ players, onReload }) {
     if (!file) return
     setUploadingPhoto(playerId)
 
-    const ext = file.name.split('.').pop()
+    // Comprimir o nome do arquivo para evitar problemas
+    const ext = file.name.split('.').pop().toLowerCase()
     const fileName = `${playerId}.${ext}`
 
-    // Deletar foto antiga se existir
-    await supabase.storage.from('avatars').remove([fileName])
+    // Remover foto antiga (ignora erro se nao existir)
+    await supabase.storage.from('avatars').remove([`${playerId}.jpg`, `${playerId}.jpeg`, `${playerId}.png`, `${playerId}.webp`])
 
     // Upload nova foto
-    const { error } = await supabase.storage.from('avatars').upload(fileName, file, {
+    const { data: uploadData, error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, {
       upsert: true,
-      contentType: file.type
+      contentType: file.type,
+      cacheControl: '0'
     })
 
-    if (!error) {
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName)
-      const photoUrl = urlData.publicUrl + '?t=' + Date.now()
-      await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+    if (uploadError) {
+      console.error('Erro upload:', uploadError)
+      alert('Erro ao subir foto: ' + uploadError.message)
+      setUploadingPhoto('')
+      return
+    }
+
+    // Montar URL publica diretamente
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const photoUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}?t=${Date.now()}`
+
+    const { error: updateError } = await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+
+    if (updateError) {
+      console.error('Erro ao salvar URL:', updateError)
+      alert('Foto subiu mas nao salvou no perfil: ' + updateError.message)
     }
 
     setUploadingPhoto('')
