@@ -42,7 +42,7 @@ export default function Layout({ children }) {
             {!isAdmin && !session && (
               <button
                 onClick={() => navigate('/admin/login')}
-                className="text-navy-600 hover:text-gold-400 text-xs transition"
+                className="text-gold-400/70 hover:text-gold-400 text-xs font-semibold border border-gold-400/30 px-2.5 py-1 rounded-lg transition"
               >
                 Admin
               </button>
