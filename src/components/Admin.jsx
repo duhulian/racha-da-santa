@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, Shuffle, Save, Trophy, UserCog, Trash2, Link, Share2, Check, Users } from 'lucide-react'
+import { Plus, Shuffle, Save, Trophy, UserCog, Trash2, Link, Share2, Check, Pencil, Camera, Upload, X, History } from 'lucide-react'
 
-const TEAM_SIZE = 7 // 6 linha + 1 goleiro
+const TEAM_SIZE = 7
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 export default function Admin() {
   const [tab, setTab] = useState('match')
@@ -13,7 +14,7 @@ export default function Admin() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
-    const { data: m } = await supabase.from('matches').select('*').order('date', { ascending: false }).limit(20)
+    const { data: m } = await supabase.from('matches').select('*').order('date', { ascending: false }).limit(50)
     setMatches(m || [])
     const { data: p } = await supabase.from('players').select('*').order('player_type').order('name')
     setPlayers(p || [])
@@ -24,6 +25,7 @@ export default function Admin() {
     { key: 'match', label: 'Rachas' },
     { key: 'stats', label: 'Estatisticas' },
     { key: 'players', label: 'Jogadores' },
+    { key: 'history', label: 'Historico' },
   ]
 
   return (
@@ -32,10 +34,10 @@ export default function Admin() {
         <UserCog size={20} className="text-gold-400" /> Painel Admin
       </h2>
 
-      <div className="flex gap-2">
+      <div className="flex gap-1.5 overflow-x-auto">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition ${
+            className={`flex-1 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap px-2 ${
               tab === t.key ? 'bg-gold-400 text-navy-900' : 'bg-navy-800 text-slate-400'
             }`}>
             {t.label}
@@ -48,6 +50,7 @@ export default function Admin() {
           {tab === 'match' && <MatchTab matches={matches} onReload={loadData} />}
           {tab === 'stats' && <StatsTab matches={matches} players={players} onReload={loadData} />}
           {tab === 'players' && <PlayersTab players={players} onReload={loadData} />}
+          {tab === 'history' && <HistoryTab players={players} onReload={loadData} />}
         </>
       )}
     </div>
@@ -90,62 +93,45 @@ function MatchTab({ matches, onReload }) {
   }
 
   async function sortTeams(matchId) {
-    // Buscar confirmados
     const { data: confs } = await supabase
       .from('confirmations').select('player_id').eq('match_id', matchId).eq('status', 'confirmed')
-
     if (!confs || confs.length < numTeams * 2) {
       alert(`Precisa de pelo menos ${numTeams * 2} confirmados para sortear ${numTeams} times.`)
       return
     }
 
-    // Limpar times antigos
     const { data: oldTeams } = await supabase.from('teams').select('id').eq('match_id', matchId)
     if (oldTeams) {
       for (const t of oldTeams) { await supabase.from('team_players').delete().eq('team_id', t.id) }
       await supabase.from('teams').delete().eq('match_id', matchId)
     }
 
-    // Embaralhar jogadores
     const ids = confs.map(c => c.player_id)
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [ids[i], ids[j]] = [ids[j], ids[i]]
     }
 
-    // Calcular quantos vao pros times e quantos pro banco
     const totalForTeams = numTeams * TEAM_SIZE
     const teamPlayers = ids.slice(0, Math.min(totalForTeams, ids.length))
-    const benchPlayers = ids.slice(Math.min(totalForTeams, ids.length))
+    const waitlistPlayers = ids.slice(Math.min(totalForTeams, ids.length))
 
-    // Criar times
     const teamNames = ['Time A', 'Time B', 'Time C', 'Time D']
-    const createdTeams = []
-
     for (let t = 0; t < numTeams; t++) {
       const { data: team } = await supabase
         .from('teams').insert({ match_id: matchId, name: teamNames[t] }).select().single()
-      createdTeams.push(team)
-
-      // Pegar jogadores desse time
       const start = t * TEAM_SIZE
       const end = Math.min(start + TEAM_SIZE, teamPlayers.length)
-      const thisTeamPlayers = teamPlayers.slice(start, end)
-
-      if (thisTeamPlayers.length > 0) {
-        await supabase.from('team_players').insert(
-          thisTeamPlayers.map(pid => ({ team_id: team.id, player_id: pid }))
-        )
+      const thisTeam = teamPlayers.slice(start, end)
+      if (thisTeam.length > 0) {
+        await supabase.from('team_players').insert(thisTeam.map(pid => ({ team_id: team.id, player_id: pid })))
       }
     }
 
-    // Criar banco de reservas se houver jogadores sobrando
-    if (benchPlayers.length > 0) {
-      const { data: bench } = await supabase
+    if (waitlistPlayers.length > 0) {
+      const { data: wl } = await supabase
         .from('teams').insert({ match_id: matchId, name: 'Lista de Espera' }).select().single()
-      await supabase.from('team_players').insert(
-        benchPlayers.map(pid => ({ team_id: bench.id, player_id: pid }))
-      )
+      await supabase.from('team_players').insert(waitlistPlayers.map(pid => ({ team_id: wl.id, player_id: pid })))
     }
 
     await supabase.from('matches').update({ status: 'sorted' }).eq('id', matchId)
@@ -163,7 +149,6 @@ function MatchTab({ matches, onReload }) {
 
   return (
     <div className="space-y-4">
-      {/* Criar racha */}
       <div className="bg-navy-800 rounded-2xl p-4 space-y-3 border border-navy-700">
         <h3 className="text-sm font-semibold text-gold-400">Criar novo racha</h3>
         <div>
@@ -183,7 +168,6 @@ function MatchTab({ matches, onReload }) {
         </button>
       </div>
 
-      {/* Lista de rachas */}
       <div className="space-y-2">
         {matches.map(match => {
           const d = new Date(match.date + 'T12:00:00')
@@ -285,7 +269,6 @@ function StatsTab({ matches, players, onReload }) {
   }
 
   async function setWinner(teamId) {
-    // Apenas times que nao sao banco de reservas podem vencer
     for (const t of teams) {
       if (t.name !== 'Lista de Espera') {
         await supabase.from('teams').update({ won: t.id === teamId }).eq('id', t.id)
@@ -296,7 +279,6 @@ function StatsTab({ matches, players, onReload }) {
   }
 
   const regularTeams = teams.filter(t => t.name !== 'Lista de Espera')
-  const bench = teams.find(t => t.name === 'Lista de Espera')
 
   return (
     <div className="space-y-4">
@@ -313,10 +295,8 @@ function StatsTab({ matches, players, onReload }) {
         </select>
       </div>
 
-      {/* Times sorteados */}
       {teams.length > 0 && selectedMatch && (
         <>
-          {/* Visualizacao dos times */}
           <div className="space-y-2">
             {teams.map(t => (
               <div key={t.id} className="bg-navy-800 rounded-xl p-3 border border-navy-700">
@@ -337,7 +317,6 @@ function StatsTab({ matches, players, onReload }) {
             ))}
           </div>
 
-          {/* Quem venceu */}
           {regularTeams.length > 0 && (
             <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
               <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2">
@@ -358,7 +337,6 @@ function StatsTab({ matches, players, onReload }) {
         </>
       )}
 
-      {/* Gols e assistencias */}
       {Object.keys(stats).length > 0 && (
         <div className="bg-navy-800 rounded-2xl p-4 space-y-3 border border-navy-700">
           <h3 className="text-sm font-semibold text-gold-400">Gols e Assistencias</h3>
@@ -400,28 +378,89 @@ function StatsTab({ matches, players, onReload }) {
 }
 
 // ============================================
-// ABA: JOGADORES
+// ABA: JOGADORES (com edicao e foto)
 // ============================================
 function PlayersTab({ players, onReload }) {
   const [showForm, setShowForm] = useState(false)
+  const [editingPlayer, setEditingPlayer] = useState(null)
   const [name, setName] = useState('')
   const [nickname, setNickname] = useState('')
   const [position, setPosition] = useState('')
   const [shirtNumber, setShirtNumber] = useState('')
   const [saving, setSaving] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState('')
 
   const mensalistas = players.filter(p => p.player_type === 'mensalista')
   const avulsos = players.filter(p => p.player_type === 'avulso')
   const positionLabels = { goleiro: 'Goleiro', zagueiro: 'Zagueiro', meia: 'Meia', atacante: 'Atacante' }
 
-  async function addPlayer() {
+  function startEdit(p) {
+    setEditingPlayer(p)
+    setName(p.name)
+    setNickname(p.nickname || '')
+    setPosition(p.position || '')
+    setShirtNumber(p.shirt_number ? String(p.shirt_number) : '')
+    setShowForm(true)
+  }
+
+  function startNew() {
+    setEditingPlayer(null)
+    setName(''); setNickname(''); setPosition(''); setShirtNumber('')
+    setShowForm(true)
+  }
+
+  function cancelForm() {
+    setEditingPlayer(null)
+    setName(''); setNickname(''); setPosition(''); setShirtNumber('')
+    setShowForm(false)
+  }
+
+  async function savePlayer() {
     if (!name.trim() || !position) return
     setSaving(true)
-    await supabase.from('players').insert({
-      name: name.trim(), nickname: nickname.trim() || null, position,
-      shirt_number: shirtNumber ? parseInt(shirtNumber) : null, player_type: 'mensalista', role: 'player'
+
+    const data = {
+      name: name.trim(),
+      nickname: nickname.trim() || null,
+      position,
+      shirt_number: shirtNumber ? parseInt(shirtNumber) : null,
+    }
+
+    if (editingPlayer) {
+      await supabase.from('players').update(data).eq('id', editingPlayer.id)
+    } else {
+      await supabase.from('players').insert({ ...data, player_type: 'mensalista', role: 'player' })
+    }
+
+    cancelForm()
+    setSaving(false)
+    onReload()
+  }
+
+  async function handlePhotoUpload(playerId, file) {
+    if (!file) return
+    setUploadingPhoto(playerId)
+
+    const ext = file.name.split('.').pop()
+    const fileName = `${playerId}.${ext}`
+
+    // Deletar foto antiga se existir
+    await supabase.storage.from('avatars').remove([fileName])
+
+    // Upload nova foto
+    const { error } = await supabase.storage.from('avatars').upload(fileName, file, {
+      upsert: true,
+      contentType: file.type
     })
-    setName(''); setNickname(''); setPosition(''); setShirtNumber(''); setShowForm(false); setSaving(false); onReload()
+
+    if (!error) {
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      const photoUrl = urlData.publicUrl + '?t=' + Date.now()
+      await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+    }
+
+    setUploadingPhoto('')
+    onReload()
   }
 
   async function promoteToMensalista(pid) {
@@ -437,13 +476,20 @@ function PlayersTab({ players, onReload }) {
 
   return (
     <div className="space-y-4">
-      <button onClick={() => setShowForm(!showForm)}
+      <button onClick={startNew}
         className="w-full bg-gold-400 hover:bg-gold-500 text-navy-900 font-bold py-2.5 rounded-lg transition flex items-center justify-center gap-2 text-sm">
         <Plus size={16} /> Cadastrar mensalista
       </button>
 
+      {/* Form de cadastro/edicao */}
       {showForm && (
-        <div className="bg-navy-800 rounded-2xl p-4 space-y-3 border border-navy-700">
+        <div className="bg-navy-800 rounded-2xl p-4 space-y-3 border border-gold-400/30">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gold-400">
+              {editingPlayer ? 'Editar jogador' : 'Novo mensalista'}
+            </h3>
+            <button onClick={cancelForm} className="text-slate-400 hover:text-white"><X size={16} /></button>
+          </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Nome completo</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)}
@@ -472,44 +518,73 @@ function PlayersTab({ players, onReload }) {
                 className="w-full bg-navy-700 rounded-lg p-2.5 text-white outline-none focus:ring-2 focus:ring-gold-400 text-sm" placeholder="10" />
             </div>
           </div>
-          <button onClick={addPlayer} disabled={saving || !name.trim() || !position}
+          <button onClick={savePlayer} disabled={saving || !name.trim() || !position}
             className="w-full bg-gold-400 hover:bg-gold-500 text-navy-900 font-bold py-2.5 rounded-lg transition disabled:opacity-50 text-sm">
-            {saving ? 'Salvando...' : 'Cadastrar'}
+            {saving ? 'Salvando...' : editingPlayer ? 'Salvar alteracoes' : 'Cadastrar'}
           </button>
         </div>
       )}
 
+      {/* Lista mensalistas */}
       <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
         <h3 className="text-sm font-semibold text-gold-400 mb-3">Mensalistas ({mensalistas.filter(p => p.active).length})</h3>
         <div className="space-y-2">
           {mensalistas.filter(p => p.active).map(p => (
             <div key={p.id} className="bg-navy-700/50 rounded-xl p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-navy-600 flex items-center justify-center text-gold-400 text-xs font-bold">
-                {p.shirt_number || '?'}
+              {/* Foto */}
+              <div className="relative">
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt="" className="w-10 h-10 rounded-full object-cover border border-navy-600" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-navy-600 flex items-center justify-center text-gold-400 text-xs font-bold">
+                    {p.shirt_number || '?'}
+                  </div>
+                )}
+                <label className="absolute -bottom-1 -right-1 w-5 h-5 bg-gold-400 rounded-full flex items-center justify-center cursor-pointer hover:bg-gold-500 transition">
+                  <Camera size={10} className="text-navy-900" />
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => handlePhotoUpload(p.id, e.target.files[0])}
+                    disabled={uploadingPhoto === p.id} />
+                </label>
               </div>
+
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">
                   {p.name} {p.nickname && <span className="text-slate-400 text-xs">({p.nickname})</span>}
                 </p>
-                <span className="text-xs text-slate-500">{positionLabels[p.position] || 'Sem posicao'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{positionLabels[p.position] || 'Sem posicao'}</span>
+                  {p.shirt_number && <span className="text-xs text-slate-500">#{p.shirt_number}</span>}
+                </div>
               </div>
-              <button onClick={() => deactivatePlayer(p.id)}
-                className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20">
-                <Trash2 size={12} />
-              </button>
+
+              <div className="flex gap-1">
+                <button onClick={() => startEdit(p)}
+                  className="text-xs p-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
+                  <Pencil size={12} />
+                </button>
+                <button onClick={() => deactivatePlayer(p.id)}
+                  className="text-xs p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20">
+                  <Trash2 size={12} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Avulsos */}
       {avulsos.filter(p => p.active).length > 0 && (
         <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
           <h3 className="text-sm font-semibold text-gold-400 mb-3">Avulsos ({avulsos.filter(p => p.active).length})</h3>
-          <p className="text-xs text-slate-500 mb-3">Jogadores que entraram pelo link de confirmacao.</p>
           <div className="space-y-2">
             {avulsos.filter(p => p.active).map(p => (
               <div key={p.id} className="bg-navy-700/50 rounded-xl p-3 flex items-center gap-3">
                 <div className="flex-1"><p className="text-white text-sm">{p.name}</p></div>
+                <button onClick={() => startEdit(p)}
+                  className="text-xs p-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
+                  <Pencil size={12} />
+                </button>
                 <button onClick={() => promoteToMensalista(p.id)}
                   className="text-xs px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 font-semibold">
                   Tornar mensalista
@@ -517,6 +592,156 @@ function PlayersTab({ players, onReload }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// ABA: IMPORTAR HISTORICO
+// ============================================
+function HistoryTab({ players, onReload }) {
+  const [date, setDate] = useState('')
+  const [selectedPlayers, setSelectedPlayers] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState('')
+
+  const activePlayers = players.filter(p => p.active)
+
+  function togglePlayer(pid) {
+    setSelectedPlayers(prev => {
+      if (prev[pid]) {
+        const copy = { ...prev }
+        delete copy[pid]
+        return copy
+      }
+      const p = activePlayers.find(pl => pl.id === pid)
+      return { ...prev, [pid]: { name: p.nickname || p.name, goals: 0, assists: 0 } }
+    })
+  }
+
+  function updatePlayerStat(pid, field, value) {
+    setSelectedPlayers(prev => ({
+      ...prev,
+      [pid]: { ...prev[pid], [field]: value }
+    }))
+  }
+
+  async function importMatch() {
+    if (!date || Object.keys(selectedPlayers).length === 0) return
+    setSaving(true)
+    setSuccess('')
+
+    // Buscar o admin logado
+    const { data: me } = await supabase
+      .from('players').select('id').eq('user_id', (await supabase.auth.getUser()).data.user.id).single()
+
+    // Criar o racha como finalizado
+    const { data: match } = await supabase
+      .from('matches')
+      .insert({ date, status: 'finished', created_by: me.id, notes: 'Importado do historico' })
+      .select()
+      .single()
+
+    if (!match) { setSaving(false); alert('Erro ao criar racha'); return }
+
+    // Criar confirmacoes para todos os selecionados
+    const confRows = Object.keys(selectedPlayers).map(pid => ({
+      match_id: match.id, player_id: pid, status: 'confirmed'
+    }))
+    await supabase.from('confirmations').insert(confRows)
+
+    // Criar stats
+    const statsRows = Object.entries(selectedPlayers).map(([pid, s]) => ({
+      match_id: match.id, player_id: pid,
+      goals: parseInt(s.goals) || 0,
+      assists: parseInt(s.assists) || 0,
+      present: true
+    }))
+    await supabase.from('match_stats').insert(statsRows)
+
+    setDate('')
+    setSelectedPlayers({})
+    setSaving(false)
+    setSuccess('Racha importado com sucesso!')
+    setTimeout(() => setSuccess(''), 3000)
+    onReload()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+        <h3 className="text-sm font-semibold text-gold-400 mb-1 flex items-center gap-2">
+          <History size={14} /> Importar racha passado
+        </h3>
+        <p className="text-xs text-slate-500 mb-3">Cadastre dados de rachas anteriores para alimentar o dashboard e os rankings.</p>
+
+        {success && <div className="bg-green-500/20 text-green-300 p-3 rounded-lg text-sm mb-3">{success}</div>}
+
+        <div className="mb-3">
+          <label className="block text-xs text-slate-400 mb-1">Data do racha</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+            className="w-full bg-navy-700 rounded-lg p-2.5 text-white outline-none focus:ring-2 focus:ring-gold-400 text-sm" />
+        </div>
+      </div>
+
+      {/* Selecionar jogadores que participaram */}
+      <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
+        <h3 className="text-sm font-semibold text-slate-300 mb-3">Quem jogou? (clique para selecionar)</h3>
+        <div className="flex flex-wrap gap-1.5">
+          {activePlayers.map(p => {
+            const isSelected = !!selectedPlayers[p.id]
+            return (
+              <button key={p.id} onClick={() => togglePlayer(p.id)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-semibold transition ${
+                  isSelected ? 'bg-gold-400 text-navy-900' : 'bg-navy-700 text-slate-400 hover:text-white'
+                }`}>
+                {p.nickname || p.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Gols e assistencias dos selecionados */}
+      {Object.keys(selectedPlayers).length > 0 && (
+        <div className="bg-navy-800 rounded-2xl p-4 space-y-3 border border-navy-700">
+          <h3 className="text-sm font-semibold text-gold-400">
+            Gols e Assistencias ({Object.keys(selectedPlayers).length} jogadores)
+          </h3>
+          {Object.entries(selectedPlayers).map(([pid, s]) => (
+            <div key={pid} className="bg-navy-700/50 rounded-xl p-3">
+              <p className="text-white text-sm font-medium mb-2">{s.name}</p>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-400 mb-1">Gols</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updatePlayerStat(pid, 'goals', Math.max(0, s.goals - 1))}
+                      className="bg-navy-600 text-white w-8 h-8 rounded-lg text-lg">-</button>
+                    <span className="text-white font-bold text-lg w-8 text-center">{s.goals}</span>
+                    <button onClick={() => updatePlayerStat(pid, 'goals', s.goals + 1)}
+                      className="bg-gold-400 text-navy-900 w-8 h-8 rounded-lg text-lg font-bold">+</button>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-400 mb-1">Assist.</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updatePlayerStat(pid, 'assists', Math.max(0, s.assists - 1))}
+                      className="bg-navy-600 text-white w-8 h-8 rounded-lg text-lg">-</button>
+                    <span className="text-white font-bold text-lg w-8 text-center">{s.assists}</span>
+                    <button onClick={() => updatePlayerStat(pid, 'assists', s.assists + 1)}
+                      className="bg-blue-600 text-white w-8 h-8 rounded-lg text-lg font-bold">+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <button onClick={importMatch} disabled={saving || !date}
+            className="w-full bg-gold-400 hover:bg-gold-500 text-navy-900 font-bold py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2">
+            <Save size={16} /> {saving ? 'Salvando...' : 'Importar Racha'}
+          </button>
         </div>
       )}
     </div>

@@ -51,7 +51,7 @@ export default function Players() {
 
       {filtered.length === 0 ? (
         <div className="bg-navy-800 rounded-2xl p-6 text-center border border-navy-700">
-          <p className="text-slate-400 text-sm">Nenhum jogador cadastrado nessa posicao.</p>
+          <p className="text-slate-400 text-sm">Nenhum jogador nessa posicao.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -59,14 +59,21 @@ export default function Players() {
             const pos = POSITION_CONFIG[p.position] || { label: '', short: '', color: 'text-slate-400', bg: 'bg-navy-700' }
             return (
               <div key={p.id} className="bg-navy-800 rounded-xl p-3 flex items-center gap-3 border border-navy-700">
-                <div className={`w-10 h-10 rounded-full ${pos.bg} flex items-center justify-center ${pos.color} font-bold text-sm`}>
-                  {p.shirt_number || '?'}
-                </div>
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-navy-600" />
+                ) : (
+                  <div className={`w-11 h-11 rounded-full ${pos.bg} flex items-center justify-center ${pos.color} font-bold text-sm`}>
+                    {p.shirt_number || '?'}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{p.name}</p>
                   {p.nickname && <p className="text-slate-500 text-xs truncate">"{p.nickname}"</p>}
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-lg ${pos.bg} ${pos.color} font-semibold`}>{pos.short}</span>
+                <div className="text-right">
+                  <span className={`text-xs px-2 py-1 rounded-lg ${pos.bg} ${pos.color} font-semibold`}>{pos.short}</span>
+                  {p.shirt_number && <p className="text-xs text-slate-500 mt-0.5">#{p.shirt_number}</p>}
+                </div>
               </div>
             )
           })}
