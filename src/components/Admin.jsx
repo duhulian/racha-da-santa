@@ -119,7 +119,7 @@ function MatchTab({ matches, onReload }) {
     const benchPlayers = ids.slice(Math.min(totalForTeams, ids.length))
 
     // Criar times
-    const teamNames = ['Time A', 'Time B', 'Time C']
+    const teamNames = ['Time A', 'Time B', 'Time C', 'Time D']
     const createdTeams = []
 
     for (let t = 0; t < numTeams; t++) {
@@ -142,7 +142,7 @@ function MatchTab({ matches, onReload }) {
     // Criar banco de reservas se houver jogadores sobrando
     if (benchPlayers.length > 0) {
       const { data: bench } = await supabase
-        .from('teams').insert({ match_id: matchId, name: 'Banco de Reservas' }).select().single()
+        .from('teams').insert({ match_id: matchId, name: 'Lista de Espera' }).select().single()
       await supabase.from('team_players').insert(
         benchPlayers.map(pid => ({ team_id: bench.id, player_id: pid }))
       )
@@ -219,6 +219,7 @@ function MatchTab({ matches, onReload }) {
                         className="bg-navy-700 text-white rounded-lg p-2 text-xs outline-none">
                         <option value={2}>2 Times</option>
                         <option value={3}>3 Times</option>
+                        <option value={4}>4 Times</option>
                       </select>
                       <button onClick={() => sortTeams(match.id)}
                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition text-xs font-semibold flex items-center justify-center gap-1.5">
@@ -286,7 +287,7 @@ function StatsTab({ matches, players, onReload }) {
   async function setWinner(teamId) {
     // Apenas times que nao sao banco de reservas podem vencer
     for (const t of teams) {
-      if (t.name !== 'Banco de Reservas') {
+      if (t.name !== 'Lista de Espera') {
         await supabase.from('teams').update({ won: t.id === teamId }).eq('id', t.id)
       }
     }
@@ -294,8 +295,8 @@ function StatsTab({ matches, players, onReload }) {
     setTeams(data || [])
   }
 
-  const regularTeams = teams.filter(t => t.name !== 'Banco de Reservas')
-  const bench = teams.find(t => t.name === 'Banco de Reservas')
+  const regularTeams = teams.filter(t => t.name !== 'Lista de Espera')
+  const bench = teams.find(t => t.name === 'Lista de Espera')
 
   return (
     <div className="space-y-4">
@@ -320,7 +321,7 @@ function StatsTab({ matches, players, onReload }) {
             {teams.map(t => (
               <div key={t.id} className="bg-navy-800 rounded-xl p-3 border border-navy-700">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className={`text-sm font-semibold ${t.name === 'Banco de Reservas' ? 'text-slate-400' : 'text-white'}`}>
+                  <h4 className={`text-sm font-semibold ${t.name === 'Lista de Espera' ? 'text-slate-400' : 'text-white'}`}>
                     {t.name} ({t.team_players?.length || 0})
                   </h4>
                   {t.won && <span className="text-xs text-gold-400">🏆 Vencedor</span>}
