@@ -64,14 +64,14 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/rankings" element={<Rankings />} />
           <Route path="/rachas" element={<MatchList />} />
-          <Route path="/racha/:id" element={<MatchDetail />} />
+          <Route path="/racha/:matchId" element={<MatchDetail />} />
           <Route path="/confirmar/:token" element={<Confirm />} />
           <Route path="/jogadores" element={<Players />} />
           <Route path="/admin/login" element={
             isAdmin ? <Navigate to="/admin" /> : <AdminLogin onLogin={refreshPlayer} />
           } />
           <Route path="/admin" element={
-            loading ? <div className="text-center py-8 text-slate-400">Carregando...</div> :
+            loading ? <div className="text-center py-8 text-on-surface-variant">Carregando...</div> :
             isAdmin ? <Admin /> : <Navigate to="/admin/login" />
           } />
           <Route path="*" element={<Navigate to="/" />} />

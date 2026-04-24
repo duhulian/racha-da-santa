@@ -4,10 +4,12 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0c1525;
-  color: #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #0A0E17;
+  color: #dfe2ef;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "tnum" on, "lnum" on;
 }
 
 * {
@@ -15,18 +17,111 @@ body {
 }
 
 input, select, textarea {
-  color: #e2e8f0;
+  color: #dfe2ef;
+  font-family: inherit;
 }
 
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #111d38;
+  background: #0f131c;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e3a6e;
+  background: #262a34;
   border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #31353f;
+}
+
+@layer components {
+  /* Card glass padrao Elite Tactical */
+  .glass-card {
+    @apply bg-white/[0.04] backdrop-blur-xl rounded-2xl border border-white/10;
+    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.02);
+  }
+
+  .glass-card-hover {
+    @apply transition-all duration-200;
+  }
+  .glass-card-hover:hover {
+    @apply bg-white/[0.07] border-white/20;
+  }
+
+  /* Botao dourado primario */
+  .btn-primary {
+    @apply bg-primary-container text-on-primary font-bold rounded-lg transition-colors duration-200;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-primary;
+  }
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  /* Botao ghost com borda dourada */
+  .btn-ghost-gold {
+    @apply border border-primary-container text-primary-container font-semibold rounded-lg transition-all duration-200;
+  }
+  .btn-ghost-gold:hover {
+    @apply bg-white/5;
+  }
+
+  /* Chip de posicao (borda colorida por posicao) */
+  .chip {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider;
+  }
+  .chip-goleiro { @apply bg-primary-container/15 text-primary border border-primary-container/30; }
+  .chip-zagueiro { @apply bg-tertiary-container/15 text-tertiary border border-tertiary-container/30; }
+  .chip-meia { @apply bg-secondary-container/15 text-secondary-fixed border border-secondary-container/30; }
+  .chip-atacante { @apply bg-error/15 text-error border border-error/30; }
+
+  /* Borda lateral colorida por posicao */
+  .border-l-goleiro { border-left: 3px solid #d4af37; }
+  .border-l-zagueiro { border-left: 3px solid #72dcff; }
+  .border-l-meia { border-left: 3px solid #79ff5b; }
+  .border-l-atacante { border-left: 3px solid #ffb4ab; }
+
+  /* Label caps estilo "section header" */
+  .label-caps {
+    @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-on-surface-variant;
+  }
+
+  /* Tabular figures para numeros em tabelas */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Input padrao */
+  .input-base {
+    @apply w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm;
+    @apply outline-none transition-all duration-200;
+  }
+  .input-base:focus {
+    @apply border-primary-container bg-white/[0.06];
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15);
+  }
+
+  /* Select padrao */
+  .select-base {
+    @apply w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm;
+    @apply outline-none transition-all duration-200 appearance-none;
+  }
+  .select-base:focus {
+    @apply border-primary-container bg-white/[0.06];
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
 }
