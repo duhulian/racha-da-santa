@@ -104,8 +104,6 @@ create index idx_players_type on players(player_type);
 
 -- =============================================
 -- ROW LEVEL SECURITY (RLS)
--- Dashboard publico: qualquer um ve (anon + authenticated)
--- Escrita: apenas admin (authenticated)
 -- =============================================
 
 alter table players enable row level security;
@@ -115,134 +113,101 @@ alter table teams enable row level security;
 alter table team_players enable row level security;
 alter table match_stats enable row level security;
 
--- PLAYERS: leitura publica, escrita admin
-create policy "Leitura publica jogadores"
-  on players for select to anon, authenticated
-  using (true);
-
-create policy "Admin insere jogadores"
-  on players for insert to authenticated
-  with check (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-    or not exists (select 1 from players)
-  );
-
-create policy "Avulso se cadastra"
-  on players for insert to anon
+-- PLAYERS
+create policy "Leitura publica jogadores" on players for select to anon, authenticated using (true);
+create policy "Admin insere jogadores" on players for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin') or not exists (select 1 from players));
+create policy "Avulso se cadastra" on players for insert to anon
   with check (player_type = 'avulso' and role = 'player');
+create policy "Admin atualiza jogadores" on players for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin') or user_id = auth.uid());
+create policy "Admin deleta jogadores" on players for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin atualiza jogadores"
-  on players for update to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-    or user_id = auth.uid()
-  );
+-- MATCHES
+create policy "Leitura publica rachas" on matches for select to anon, authenticated using (true);
+create policy "Admin cria rachas" on matches for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin atualiza rachas" on matches for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta rachas" on matches for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin deleta jogadores"
-  on players for delete to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
+-- CONFIRMATIONS
+create policy "Leitura publica confirmacoes" on confirmations for select to anon, authenticated using (true);
+create policy "Qualquer um confirma presenca" on confirmations for insert to anon, authenticated with check (true);
+create policy "Qualquer um remove confirmacao" on confirmations for delete to anon, authenticated using (true);
+create policy "Qualquer um atualiza confirmacao" on confirmations for update to anon, authenticated using (true);
 
--- MATCHES: leitura publica, escrita admin
-create policy "Leitura publica rachas"
-  on matches for select to anon, authenticated
-  using (true);
+-- TEAMS
+create policy "Leitura publica times" on teams for select to anon, authenticated using (true);
+create policy "Admin cria times" on teams for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin atualiza times" on teams for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta times" on teams for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin cria rachas"
-  on matches for insert to authenticated
-  with check (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
+-- TEAM_PLAYERS
+create policy "Leitura publica jogadores do time" on team_players for select to anon, authenticated using (true);
+create policy "Admin insere jogadores no time" on team_players for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta jogadores do time" on team_players for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin atualiza rachas"
-  on matches for update to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
+-- MATCH_STATS
+create policy "Leitura publica estatisticas" on match_stats for select to anon, authenticated using (true);
+create policy "Admin insere estatisticas" on match_stats for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin atualiza estatisticas" on match_stats for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta estatisticas" on match_stats for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin deleta rachas"
-  on matches for delete to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
+-- =============================================
+-- TABELAS ADICIONAIS (v7) - sistema de jogos de 7 min
+-- =============================================
 
--- CONFIRMATIONS: leitura publica, escrita publica (qualquer um confirma via link)
-create policy "Leitura publica confirmacoes"
-  on confirmations for select to anon, authenticated
-  using (true);
+create table if not exists games (
+  id uuid default gen_random_uuid() primary key,
+  match_id uuid references matches(id) on delete cascade,
+  game_number integer not null,
+  team_a_id uuid references teams(id) on delete cascade,
+  team_b_id uuid references teams(id) on delete cascade,
+  score_a integer default 0,
+  score_b integer default 0,
+  winner_team_id uuid references teams(id),
+  status text not null default 'in_progress' check (status in ('in_progress', 'finished')),
+  created_at timestamp with time zone default now()
+);
 
-create policy "Qualquer um confirma presenca"
-  on confirmations for insert to anon, authenticated
-  with check (true);
+create table if not exists game_goals (
+  id uuid default gen_random_uuid() primary key,
+  game_id uuid references games(id) on delete cascade,
+  team_id uuid references teams(id) on delete cascade,
+  scorer_id uuid references players(id) on delete cascade,
+  assist_id uuid references players(id) on delete set null,
+  created_at timestamp with time zone default now()
+);
 
-create policy "Qualquer um remove confirmacao"
-  on confirmations for delete to anon, authenticated
-  using (true);
+create index if not exists idx_games_match on games(match_id);
+create index if not exists idx_game_goals_game on game_goals(game_id);
 
-create policy "Qualquer um atualiza confirmacao"
-  on confirmations for update to anon, authenticated
-  using (true);
+alter table games enable row level security;
+alter table game_goals enable row level security;
 
--- TEAMS: leitura publica, escrita admin
-create policy "Leitura publica times"
-  on teams for select to anon, authenticated
-  using (true);
+create policy "Leitura publica games" on games for select to anon, authenticated using (true);
+create policy "Admin insere games" on games for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin atualiza games" on games for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta games" on games for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
 
-create policy "Admin cria times"
-  on teams for insert to authenticated
-  with check (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
-create policy "Admin atualiza times"
-  on teams for update to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
-create policy "Admin deleta times"
-  on teams for delete to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
--- TEAM_PLAYERS: leitura publica, escrita admin
-create policy "Leitura publica jogadores do time"
-  on team_players for select to anon, authenticated
-  using (true);
-
-create policy "Admin insere jogadores no time"
-  on team_players for insert to authenticated
-  with check (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
-create policy "Admin deleta jogadores do time"
-  on team_players for delete to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
--- MATCH_STATS: leitura publica, escrita admin
-create policy "Leitura publica estatisticas"
-  on match_stats for select to anon, authenticated
-  using (true);
-
-create policy "Admin insere estatisticas"
-  on match_stats for insert to authenticated
-  with check (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
-create policy "Admin atualiza estatisticas"
-  on match_stats for update to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
-
-create policy "Admin deleta estatisticas"
-  on match_stats for delete to authenticated
-  using (
-    exists (select 1 from players where user_id = auth.uid() and role = 'admin')
-  );
+create policy "Leitura publica game_goals" on game_goals for select to anon, authenticated using (true);
+create policy "Admin insere game_goals" on game_goals for insert to authenticated
+  with check (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin atualiza game_goals" on game_goals for update to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));
+create policy "Admin deleta game_goals" on game_goals for delete to authenticated
+  using (exists (select 1 from players where user_id = auth.uid() and role = 'admin'));

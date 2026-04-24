@@ -1,4 +1,4 @@
-const CACHE_NAME = 'racha-da-santa-v1'
+const CACHE_NAME = 'racha-da-santa-v8'
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()

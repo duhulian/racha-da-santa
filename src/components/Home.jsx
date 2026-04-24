@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Target, HandHelping, Users, Calendar, ChevronRight, Trophy } from 'lucide-react'
+import { Target, Handshake, Users, Calendar, ChevronRight, MapPin, History, Trophy } from 'lucide-react'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -17,7 +16,6 @@ export default function Home() {
 
   async function loadDashboard() {
     try {
-      // Proximo racha aberto
       const { data: openMatches } = await supabase
         .from('matches')
         .select('*')
@@ -33,7 +31,6 @@ export default function Home() {
         setNextMatch({ ...m, confirmedCount: count || 0 })
       }
 
-      // Rachas recentes finalizados (ultimos 5)
       const { data: recent } = await supabase
         .from('matches')
         .select('*')
@@ -41,7 +38,6 @@ export default function Home() {
         .order('date', { ascending: false })
         .limit(5)
 
-      // Para cada racha, buscar time vencedor e top scorer
       const enriched = []
       if (recent) {
         for (const m of recent) {
@@ -64,7 +60,6 @@ export default function Home() {
       }
       setRecentMatches(enriched)
 
-      // Stats gerais
       const { count: totalMatches } = await supabase
         .from('matches').select('*', { count: 'exact', head: true }).eq('status', 'finished')
       const { count: totalPlayers } = await supabase
@@ -99,136 +94,177 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-16">
         <img src="/logo.png" alt="" className="w-16 h-16 rounded-full mx-auto mb-3 animate-pulse" />
-        <p className="text-slate-400">Carregando dashboard...</p>
+        <p className="text-on-surface-variant">Carregando...</p>
       </div>
     )
   }
 
+  const matchDate = nextMatch ? new Date(nextMatch.date + 'T12:00:00') : null
+  const matchDateLabel = matchDate?.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  const maxGoals = topScorers[0]?.value || 1
+  const maxAssists = topAssists[0]?.value || 1
+
   return (
-    <div className="space-y-5">
-      <div className="text-center">
-        <img src="/logo.png" alt="" className="w-20 h-20 rounded-full mx-auto mb-2 border-2 border-gold-400/30" />
-        <h2 className="text-xl font-bold text-white">Racha Da Santa</h2>
-        <p className="text-slate-400 text-sm mt-1">Dashboard geral</p>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+      {/* Coluna esquerda (principal) */}
+      <div className="lg:col-span-7 space-y-4 lg:space-y-6">
+        {/* Card: Proximo Racha */}
+        {nextMatch ? (
+          <div className="glass-card p-6 relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary-container/10 rounded-full blur-3xl"></div>
 
-      {/* Proximo racha */}
-      {nextMatch && (
-        <div className="bg-gradient-to-r from-navy-700 to-navy-800 border border-gold-400/20 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Calendar size={16} className="text-gold-400" />
-            <span className="text-xs text-gold-400 font-semibold uppercase">Proximo Racha</span>
+            <div className="flex items-start justify-between mb-4 relative">
+              <div>
+                <span className="label-caps text-primary-container">Proximo Racha</span>
+                <p className="text-2xl lg:text-3xl font-bold text-white capitalize mt-1 tracking-tight">
+                  {matchDateLabel}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-primary-container/15 border border-primary-container/30 px-3 py-1.5 rounded-full whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-secondary-fixed shadow-[0_0_8px_rgba(121,255,91,0.7)]"></span>
+                <span className="text-xs font-bold text-primary-container">{nextMatch.confirmedCount} Confirmados</span>
+              </div>
+            </div>
+
+            {nextMatch.notes && (
+              <div className="flex items-center gap-2 text-on-surface-variant mb-5 relative">
+                <MapPin size={16} />
+                <span className="text-sm">{nextMatch.notes}</span>
+              </div>
+            )}
+
+            <button onClick={() => navigate(`/confirmar/${nextMatch.token}`)}
+              className="btn-primary w-full py-3 relative">
+              Ver confirmacoes
+            </button>
           </div>
-          <p className="text-white font-bold capitalize">
-            {new Date(nextMatch.date + 'T12:00:00').toLocaleDateString('pt-BR', {
-              weekday: 'long', day: '2-digit', month: 'long'
-            })}
-          </p>
-          <p className="text-gold-300 text-sm mt-1">
-            {nextMatch.confirmedCount} confirmado{nextMatch.confirmedCount !== 1 ? 's' : ''}
-          </p>
+        ) : (
+          <div className="glass-card p-6 text-center">
+            <Calendar size={32} className="text-on-surface-variant/60 mx-auto mb-2" />
+            <p className="text-on-surface-variant">Nenhum racha aberto no momento.</p>
+          </div>
+        )}
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-3 gap-3 lg:gap-4">
+          <StatBentoCard icon={Calendar} value={generalStats.totalMatches} label="Rachas" color="primary-container" />
+          <StatBentoCard icon={Users} value={generalStats.totalPlayers} label="Jogadores" color="tertiary-container" />
+          <StatBentoCard icon={Target} value={generalStats.totalGoals} label="Gols" color="secondary-fixed" />
         </div>
-      )}
 
-      {/* Cards de resumo */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={Calendar} label="Rachas" value={generalStats.totalMatches} color="text-gold-400" />
-        <StatCard icon={Users} label="Jogadores" value={generalStats.totalPlayers} color="text-blue-400" />
-        <StatCard icon={Target} label="Gols total" value={generalStats.totalGoals} color="text-green-400" />
-      </div>
-
-      {/* Rachas recentes */}
-      {recentMatches.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2">
-            <Calendar size={14} /> Rachas Recentes
-          </h3>
-          <div className="space-y-2">
-            {recentMatches.map(m => {
-              const d = new Date(m.date + 'T12:00:00')
-              return (
-                <button key={m.id} onClick={() => navigate(`/racha/${m.id}`)}
-                  className="w-full bg-navy-800 rounded-xl p-3 border border-navy-700 flex items-center gap-3 hover:border-gold-400/30 transition text-left">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium capitalize">
-                      {d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {m.winnerName && (
-                        <span className="text-xs text-gold-400 flex items-center gap-1">
-                          🏆 {m.winnerName}
-                        </span>
-                      )}
-                      {m.topScorer && (
-                        <span className="text-xs text-slate-400">
-                          ⚽ {m.topScorer.name} ({m.topScorer.goals})
-                        </span>
-                      )}
+        {/* Rachas Recentes */}
+        {recentMatches.length > 0 && (
+          <div className="glass-card p-5 lg:p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <History size={18} className="text-primary-container" />
+              Rachas Recentes
+            </h3>
+            <div className="divide-y divide-white/5">
+              {recentMatches.map(m => {
+                const d = new Date(m.date + 'T12:00:00')
+                const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                return (
+                  <button key={m.id} onClick={() => navigate(`/racha/${m.id}`)}
+                    className="w-full flex items-center justify-between py-3 group hover:bg-white/[0.02] transition -mx-5 lg:-mx-6 px-5 lg:px-6 text-left relative">
+                    <span className="absolute left-0 top-0 bottom-0 w-1 bg-primary-container opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <span className="text-sm text-on-surface-variant w-12 shrink-0 tabular-nums">{dateStr}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {m.winnerName && (
+                          <>
+                            <Trophy size={14} className="text-primary-container shrink-0" />
+                            <span className="text-sm font-semibold text-white truncate">{m.winnerName}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-500" />
-                </button>
-              )
-            })}
+                    {m.topScorer && (
+                      <span className="text-xs text-on-surface-variant whitespace-nowrap hidden sm:flex items-center gap-1">
+                        <Target size={12} className="text-primary-container" />
+                        {m.topScorer.name} ({m.topScorer.goals})
+                      </span>
+                    )}
+                    <ChevronRight size={16} className="text-on-surface-variant/50 ml-2 shrink-0" />
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={() => navigate('/rachas')}
+              className="w-full mt-4 py-2 border border-white/10 rounded-lg text-sm text-on-surface-variant hover:bg-white/5 hover:text-white transition">
+              Ver todos
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Grafico artilheiros */}
-      {topScorers.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-          <h3 className="text-sm font-semibold text-gold-400 mb-4 flex items-center gap-2">
-            <Target size={14} /> Top Artilheiros
-          </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={topScorers} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#152546" />
-              <XAxis type="number" stroke="#64748b" />
-              <YAxis type="category" dataKey="name" stroke="#94a3b8" width={80} tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ backgroundColor: '#111d38', border: '1px solid #1a2f5a', borderRadius: '8px', color: '#e2e8f0' }} />
-              <Bar dataKey="value" fill="#c9a84c" radius={[0, 4, 4, 0]} name="Gols" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* Coluna direita (rankings rapidos) */}
+      <div className="lg:col-span-5 space-y-4 lg:space-y-6">
+        {topScorers.length > 0 && (
+          <div className="glass-card p-5 lg:p-6">
+            <h3 className="text-xl font-bold text-white mb-5 flex items-center gap-2">
+              <Target size={18} className="text-primary-container" />
+              Top 5 Artilheiros
+            </h3>
+            <div className="space-y-4">
+              {topScorers.map((p, i) => (
+                <BarItem key={i} name={p.name} value={p.value} max={maxGoals} color="primary-container" />
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* Grafico assistencias */}
-      {topAssists.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-          <h3 className="text-sm font-semibold text-blue-400 mb-4 flex items-center gap-2">
-            <HandHelping size={14} /> Top Assistencias
-          </h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={topAssists} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#152546" />
-              <XAxis type="number" stroke="#64748b" />
-              <YAxis type="category" dataKey="name" stroke="#94a3b8" width={80} tick={{ fontSize: 12 }} />
-              <Tooltip contentStyle={{ backgroundColor: '#111d38', border: '1px solid #1a2f5a', borderRadius: '8px', color: '#e2e8f0' }} />
-              <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Assist." />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        {topAssists.length > 0 && (
+          <div className="glass-card p-5 lg:p-6">
+            <h3 className="text-xl font-bold text-white mb-5 flex items-center gap-2">
+              <Handshake size={18} className="text-tertiary-container" />
+              Top 5 Assistencias
+            </h3>
+            <div className="space-y-4">
+              {topAssists.map((p, i) => (
+                <BarItem key={i} name={p.name} value={p.value} max={maxAssists} color="tertiary-container" />
+              ))}
+            </div>
+          </div>
+        )}
 
-      {topScorers.length === 0 && recentMatches.length === 0 && (
-        <div className="bg-navy-800 rounded-2xl p-6 text-center border border-navy-700">
-          <div className="text-4xl mb-3">📊</div>
-          <p className="text-slate-400">Nenhum racha registrado ainda.</p>
-          <p className="text-slate-500 text-sm mt-1">Os graficos aparecem quando o admin registrar os primeiros dados.</p>
-        </div>
-      )}
+        {topScorers.length === 0 && topAssists.length === 0 && (
+          <div className="glass-card p-6 text-center">
+            <div className="text-4xl mb-2">📊</div>
+            <p className="text-on-surface-variant text-sm">Os rankings aparecem quando o primeiro racha for finalizado.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function StatCard({ icon: Icon, label, value, color }) {
+function StatBentoCard({ icon: Icon, value, label, color }) {
   return (
-    <div className="bg-navy-800 rounded-xl p-3 text-center border border-navy-700">
-      <Icon size={18} className={`${color} mx-auto mb-1`} />
-      <p className="text-xl font-bold text-white">{value}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+    <div className="glass-card p-4 lg:p-5 flex flex-col items-center justify-center relative overflow-hidden text-center">
+      <Icon size={22} className={`text-${color}/40 absolute top-2 right-2 lg:top-3 lg:right-3`} />
+      <span className="text-3xl lg:text-4xl font-extrabold text-white tabular-nums">{value}</span>
+      <span className="label-caps mt-1">{label}</span>
+    </div>
+  )
+}
+
+function BarItem({ name, value, max, color }) {
+  const pct = Math.max(5, (value / max) * 100)
+  const textColor = color === 'primary-container' ? 'text-primary-container' : 'text-tertiary-container'
+  const barGradient = color === 'primary-container'
+    ? 'from-primary-container/40 to-primary-container'
+    : 'from-tertiary-container/40 to-tertiary-container'
+  return (
+    <div>
+      <div className="flex justify-between mb-1.5">
+        <span className="text-sm font-semibold text-white truncate">{name}</span>
+        <span className={`text-sm font-bold ${textColor} tabular-nums shrink-0 ml-2`}>{value}</span>
+      </div>
+      <div className="w-full bg-white/[0.06] rounded-full h-2 overflow-hidden">
+        <div className={`h-full rounded-full bg-gradient-to-r ${barGradient}`} style={{ width: `${pct}%` }}></div>
+      </div>
     </div>
   )
 }

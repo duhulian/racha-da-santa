@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Trophy, Target, HandHelping, Users, ArrowLeft, Shield, Swords } from 'lucide-react'
+import { Trophy, Target, Handshake, ArrowLeft, Shield, Swords, Calendar } from 'lucide-react'
 
 const POSITION_ORDER = { goleiro: 0, zagueiro: 1, meia: 2, atacante: 3 }
 const POSITION_LABELS = { goleiro: 'GOL', zagueiro: 'ZAG', meia: 'MEI', atacante: 'ATA' }
+const POSITION_CHIP = { goleiro: 'chip-goleiro', zagueiro: 'chip-zagueiro', meia: 'chip-meia', atacante: 'chip-atacante' }
 
 export default function MatchDetail() {
   const { matchId } = useParams()
@@ -46,23 +47,24 @@ export default function MatchDetail() {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-16">
         <img src="/logo.png" alt="" className="w-16 h-16 rounded-full mx-auto mb-3 animate-pulse" />
-        <p className="text-slate-400">Carregando racha...</p>
+        <p className="text-on-surface-variant">Carregando racha...</p>
       </div>
     )
   }
 
-  if (!match) return <div className="text-center py-12"><p className="text-slate-400">Racha nao encontrado.</p></div>
+  if (!match) return <div className="text-center py-12 text-on-surface-variant">Racha nao encontrado.</div>
 
   const matchDate = new Date(match.date + 'T12:00:00')
-  const formattedDate = matchDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  const dayFormat = matchDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  const weekdayFormat = matchDate.toLocaleDateString('pt-BR', { weekday: 'long' })
 
   const regularTeams = teams.filter(t => t.name !== 'Lista de Espera')
   const waitlist = teams.find(t => t.name === 'Lista de Espera')
   const winnerTeam = regularTeams.find(t => t.won)
 
-  // Calcular classificacao a partir dos jogos
+  // Classificacao
   const classification = regularTeams.map(team => {
     let wins = 0, draws = 0, losses = 0, goalsFor = 0, goalsAgainst = 0, gamesPlayed = 0
 
@@ -84,201 +86,291 @@ export default function MatchDetail() {
 
     return {
       id: team.id, name: team.name, won: team.won,
-      gamesPlayed, wins, draws, losses,
-      goalsFor, goalsAgainst,
+      gamesPlayed, wins, draws, losses, goalsFor, goalsAgainst,
       goalDiff: goalsFor - goalsAgainst,
       points: wins * 3 + draws
     }
   }).sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor)
 
-  // Top artilheiros e assistencias do racha
   const topScorers = [...stats].sort((a, b) => b.goals - a.goals).filter(s => s.goals > 0).slice(0, 3)
   const topAssist = [...stats].sort((a, b) => b.assists - a.assists).filter(s => s.assists > 0).slice(0, 1)
   const totalGoals = stats.reduce((sum, s) => sum + s.goals, 0)
   const totalAssists = stats.reduce((sum, s) => sum + s.assists, 0)
 
   return (
-    <div className="space-y-4">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-slate-400 hover:text-white transition text-sm">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <button onClick={() => navigate(-1)}
+        className="inline-flex items-center gap-1.5 text-on-surface-variant hover:text-white transition text-sm">
         <ArrowLeft size={16} /> Voltar
       </button>
 
-      {/* Info do racha */}
-      <div className="bg-gradient-to-r from-navy-700 to-navy-800 border border-gold-400/20 rounded-2xl p-4 text-center">
-        <img src="/logo.png" alt="" className="w-14 h-14 rounded-full mx-auto mb-2 border-2 border-gold-400/30" />
-        <h2 className="text-lg font-bold text-white capitalize">{formattedDate}</h2>
-        {match.notes && match.notes !== 'Importado do historico' && <p className="text-slate-400 text-sm mt-1">{match.notes}</p>}
+      {/* Cabecalho */}
+      <div className="glass-card p-6 lg:p-8 relative overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-60 h-60 bg-primary-container/10 rounded-full blur-3xl"></div>
+        <div className="relative">
+          <span className="label-caps text-primary-container flex items-center gap-2">
+            <Calendar size={14} /> Sumula do Racha
+          </span>
+          <h2 className="text-3xl lg:text-5xl font-extrabold text-white capitalize mt-2 tracking-tight">{weekdayFormat}</h2>
+          <p className="text-on-surface-variant text-lg mt-1 capitalize">{dayFormat}</p>
+          {match.notes && match.notes !== 'Importado do historico' && (
+            <p className="text-on-surface-variant/80 text-sm mt-2 italic">{match.notes}</p>
+          )}
+        </div>
       </div>
 
-      {/* Destaques */}
-      {match.status === 'finished' && stats.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-gold-400/20">
-          <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2"><Trophy size={14} /> Destaques</h3>
-
-          {winnerTeam && (
-            <div className="bg-gold-400/10 rounded-xl p-3 mb-3 flex items-center gap-3">
-              <div className="text-2xl">🏆</div>
-              <div><p className="text-gold-400 text-xs font-semibold uppercase">Time Campeao</p><p className="text-white font-bold">{winnerTeam.name}</p></div>
-            </div>
-          )}
-
-          {topScorers.length > 0 && (
-            <div className="mb-3">
-              <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><Target size={12} className="text-gold-400" /> Artilheiros</p>
-              {topScorers.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-2 py-1">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    i === 0 ? 'bg-gold-400/20 text-gold-400' : i === 1 ? 'bg-slate-400/20 text-slate-300' : 'bg-amber-700/20 text-amber-600'}`}>{i + 1}</div>
-                  {s.players?.photo_url && <img src={s.players.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />}
-                  <span className="text-white text-sm flex-1">{s.players?.nickname || s.players?.name}</span>
-                  <span className="text-gold-400 font-bold text-sm">{s.goals} gol{s.goals !== 1 ? 's' : ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {topAssist.length > 0 && (
-            <div className="mb-2">
-              <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><HandHelping size={12} className="text-blue-400" /> Lider em Assistencias</p>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-xs font-bold">1</div>
-                {topAssist[0].players?.photo_url && <img src={topAssist[0].players.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />}
-                <span className="text-white text-sm flex-1">{topAssist[0].players?.nickname || topAssist[0].players?.name}</span>
-                <span className="text-blue-400 font-bold text-sm">{topAssist[0].assists} assist.</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Esquerda: Campeao + classificacao + jogos */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Campeao */}
+          {match.status === 'finished' && winnerTeam && (
+            <div className="glass-card p-6 lg:p-8 relative overflow-hidden border-primary-container/30">
+              <Trophy size={120} className="absolute -bottom-8 -right-4 text-primary-container/10" />
+              <span className="label-caps text-primary-container">Campeao da Noite</span>
+              <p className="text-3xl lg:text-4xl font-extrabold text-white mt-2 tracking-tight">{winnerTeam.name}</p>
+              <div className="flex gap-6 mt-5 pt-5 border-t border-white/5">
+                <Metric value={classification[0]?.wins || 0} label="Vitorias" />
+                <Metric value={classification[0]?.goalsFor || 0} label="Gols Pro" />
+                <Metric value={totalGoals} label="Total Gols" highlight />
               </div>
             </div>
           )}
 
-          <div className="flex gap-3 mt-3 pt-3 border-t border-navy-700">
-            <div className="flex-1 text-center"><p className="text-lg font-bold text-white">{totalGoals}</p><p className="text-xs text-slate-500">Gols</p></div>
-            <div className="flex-1 text-center"><p className="text-lg font-bold text-white">{totalAssists}</p><p className="text-xs text-slate-500">Assist.</p></div>
-            <div className="flex-1 text-center"><p className="text-lg font-bold text-white">{games.length}</p><p className="text-xs text-slate-500">Jogos</p></div>
-            <div className="flex-1 text-center"><p className="text-lg font-bold text-white">{stats.filter(s => s.present).length}</p><p className="text-xs text-slate-500">Jogadores</p></div>
-          </div>
-        </div>
-      )}
-
-      {/* Tabela de classificacao */}
-      {games.length > 0 && classification.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-          <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2"><Trophy size={14} /> Classificacao</h3>
-
-          {/* Header */}
-          <div className="flex items-center gap-1 pb-2 border-b border-navy-700 text-xs text-slate-500">
-            <span className="w-5 text-center">#</span>
-            <span className="flex-1">Time</span>
-            <span className="w-6 text-center">J</span>
-            <span className="w-6 text-center">V</span>
-            <span className="w-6 text-center">E</span>
-            <span className="w-6 text-center">D</span>
-            <span className="w-8 text-center">SG</span>
-            <span className="w-8 text-center font-bold text-gold-400">Pts</span>
-          </div>
-
-          {classification.map((t, i) => (
-            <div key={t.id} className={`flex items-center gap-1 py-2 text-sm border-b border-navy-700/30 last:border-0 ${t.won ? 'bg-gold-400/5' : ''}`}>
-              <span className={`w-5 text-center text-xs font-bold ${i === 0 ? 'text-gold-400' : 'text-slate-500'}`}>{i + 1}</span>
-              <span className="flex-1 text-white font-medium truncate">{t.name} {t.won ? '🏆' : ''}</span>
-              <span className="w-6 text-center text-slate-400">{t.gamesPlayed}</span>
-              <span className="w-6 text-center text-green-400">{t.wins}</span>
-              <span className="w-6 text-center text-slate-400">{t.draws}</span>
-              <span className="w-6 text-center text-red-400">{t.losses}</span>
-              <span className={`w-8 text-center ${t.goalDiff > 0 ? 'text-green-400' : t.goalDiff < 0 ? 'text-red-400' : 'text-slate-400'}`}>{t.goalDiff > 0 ? '+' : ''}{t.goalDiff}</span>
-              <span className="w-8 text-center font-bold text-gold-400">{t.points}</span>
+          {/* Classificacao */}
+          {games.length > 0 && classification.length > 0 && (
+            <div className="glass-card overflow-hidden">
+              <div className="p-5 lg:p-6 border-b border-white/5">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Trophy size={18} className="text-primary-container" /> Classificacao
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm tabular-nums">
+                  <thead className="bg-white/[0.02]">
+                    <tr className="text-left text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+                      <th className="px-4 py-3 w-8">#</th>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-2 py-3 text-center w-10">J</th>
+                      <th className="px-2 py-3 text-center w-10">V</th>
+                      <th className="px-2 py-3 text-center w-10">E</th>
+                      <th className="px-2 py-3 text-center w-10">D</th>
+                      <th className="px-2 py-3 text-center w-12">SG</th>
+                      <th className="px-4 py-3 text-center w-14 text-primary-container">PTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classification.map((t, i) => (
+                      <tr key={t.id} className={`border-b border-white/5 last:border-0 ${t.won ? 'bg-primary-container/5' : ''}`}>
+                        <td className="px-4 py-3 font-bold text-on-surface-variant">{i + 1}</td>
+                        <td className="px-4 py-3 font-semibold text-white">
+                          {t.name} {t.won && <span className="text-primary-container">🏆</span>}
+                        </td>
+                        <td className="px-2 py-3 text-center text-on-surface-variant">{t.gamesPlayed}</td>
+                        <td className="px-2 py-3 text-center text-secondary-fixed font-semibold">{t.wins}</td>
+                        <td className="px-2 py-3 text-center text-on-surface-variant">{t.draws}</td>
+                        <td className="px-2 py-3 text-center text-error">{t.losses}</td>
+                        <td className={`px-2 py-3 text-center ${t.goalDiff > 0 ? 'text-secondary-fixed' : t.goalDiff < 0 ? 'text-error' : 'text-on-surface-variant'}`}>
+                          {t.goalDiff > 0 ? '+' : ''}{t.goalDiff}
+                        </td>
+                        <td className="px-4 py-3 text-center font-extrabold text-primary-container">{t.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* Lista de jogos */}
-      {games.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-          <h3 className="text-sm font-semibold text-gold-400 mb-3 flex items-center gap-2"><Swords size={14} /> Jogos ({games.length})</h3>
-          <div className="space-y-2">
-            {games.map(g => {
-              const tA = regularTeams.find(t => t.id === g.team_a_id)
-              const tB = regularTeams.find(t => t.id === g.team_b_id)
-              return (
-                <div key={g.id} className="bg-navy-700/50 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-500">Jogo {g.game_number}</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-3 mb-1">
-                    <span className={`text-sm font-semibold flex-1 text-right ${g.score_a > g.score_b ? 'text-gold-400' : g.score_a < g.score_b ? 'text-slate-400' : 'text-white'}`}>{tA?.name}</span>
-                    <span className="bg-navy-600 px-3 py-1 rounded-lg text-white font-bold">{g.score_a} x {g.score_b}</span>
-                    <span className={`text-sm font-semibold flex-1 ${g.score_b > g.score_a ? 'text-gold-400' : g.score_b < g.score_a ? 'text-slate-400' : 'text-white'}`}>{tB?.name}</span>
-                  </div>
-                  {g.game_goals?.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5">
-                      {g.game_goals.map((gl, i) => (
-                        <p key={i} className="text-xs text-slate-400">
-                          ⚽ {gl.scorer?.nickname || gl.scorer?.name}
-                          {gl.assister && <span className="text-slate-500"> (assist. {gl.assister?.nickname || gl.assister?.name})</span>}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Escalacao */}
-      {regularTeams.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gold-400 flex items-center gap-2"><Shield size={14} /> Escalacao</h3>
-          {regularTeams.map(team => {
-            const sorted = [...(team.team_players || [])].sort((a, b) => {
-              return (POSITION_ORDER[a.players?.position] ?? 99) - (POSITION_ORDER[b.players?.position] ?? 99)
-            })
-            const hasGk = sorted.some(tp => tp.players?.position === 'goleiro')
-            const getPS = (pid) => stats.find(s => s.player_id === pid)
-
-            return (
-              <div key={team.id} className={`bg-navy-800 rounded-2xl p-4 border ${team.won ? 'border-gold-400/40' : 'border-navy-700'}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-white font-semibold">{team.name} {team.won ? '🏆' : ''}</h4>
-                  <span className="text-xs text-slate-500">{sorted.length} jogadores</span>
-                </div>
-                {!hasGk && <p className="text-xs text-yellow-400/80 bg-yellow-400/10 rounded-lg px-2 py-1 mb-2">Sem goleiro fixo. Gol revezado.</p>}
-                <div className="space-y-1.5">
-                  {sorted.map(tp => {
-                    const p = tp.players; const pS = getPS(tp.player_id)
-                    return (
-                      <div key={tp.player_id} className="flex items-center gap-2 py-1 border-b border-navy-700/30 last:border-0">
-                        {p?.photo_url ? <img src={p.photo_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                          : <div className="w-7 h-7 rounded-full bg-navy-700 flex items-center justify-center text-slate-400 text-xs font-bold">{p?.shirt_number || '?'}</div>}
-                        <span className="text-xs text-slate-500 w-8">{POSITION_LABELS[p?.position] || '---'}</span>
-                        <span className="text-white text-sm flex-1 truncate">{p?.nickname || p?.name}</span>
-                        {pS && (pS.goals > 0 || pS.assists > 0) && (
-                          <div className="flex items-center gap-2">
-                            {pS.goals > 0 && <span className="text-gold-400 text-xs font-bold">{pS.goals}⚽</span>}
-                            {pS.assists > 0 && <span className="text-blue-400 text-xs font-bold">{pS.assists}🅰️</span>}
-                          </div>
-                        )}
+          {/* Jogos */}
+          {games.length > 0 && (
+            <div className="glass-card p-5 lg:p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Swords size={18} className="text-primary-container" /> Jogos ({games.length})
+              </h3>
+              <div className="space-y-3">
+                {games.map(g => {
+                  const tA = regularTeams.find(t => t.id === g.team_a_id)
+                  const tB = regularTeams.find(t => t.id === g.team_b_id)
+                  return (
+                    <div key={g.id} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="label-caps">Jogo {g.game_number}</span>
                       </div>
-                    )
-                  })}
-                </div>
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                        <span className={`text-sm lg:text-base font-bold text-right truncate ${g.score_a > g.score_b ? 'text-primary-container' : g.score_a < g.score_b ? 'text-on-surface-variant' : 'text-white'}`}>
+                          {tA?.name}
+                        </span>
+                        <span className="bg-white/5 border border-white/10 px-4 py-2 rounded-lg font-extrabold text-xl lg:text-2xl tabular-nums text-white whitespace-nowrap">
+                          {g.score_a} <span className="text-on-surface-variant/60 text-sm">x</span> {g.score_b}
+                        </span>
+                        <span className={`text-sm lg:text-base font-bold truncate ${g.score_b > g.score_a ? 'text-primary-container' : g.score_b < g.score_a ? 'text-on-surface-variant' : 'text-white'}`}>
+                          {tB?.name}
+                        </span>
+                      </div>
+                      {g.game_goals?.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
+                          {g.game_goals.map((gl, i) => (
+                            <p key={i} className="text-xs text-on-surface-variant">
+                              <Target size={10} className="inline mr-1 text-primary-container" />
+                              {gl.scorer?.nickname || gl.scorer?.name}
+                              {gl.assister && (
+                                <span className="text-on-surface-variant/70"> (assist. {gl.assister?.nickname || gl.assister?.name})</span>
+                              )}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Lista de espera */}
-      {waitlist && waitlist.team_players?.length > 0 && (
-        <div className="bg-navy-800 rounded-2xl p-4 border border-navy-700">
-          <h4 className="text-slate-400 text-sm font-semibold mb-2">Lista de Espera ({waitlist.team_players.length})</h4>
-          <div className="flex flex-wrap gap-1.5">
-            {waitlist.team_players.map(tp => (
-              <span key={tp.player_id} className="text-xs bg-navy-700 text-slate-400 px-2 py-1 rounded">{tp.players?.nickname || tp.players?.name}</span>
-            ))}
-          </div>
+        {/* Direita: destaques + escalacoes */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Destaques individuais */}
+          {match.status === 'finished' && stats.length > 0 && (
+            <div className="glass-card p-5 lg:p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Trophy size={18} className="text-primary-container" /> Destaques
+              </h3>
+
+              {topScorers.length > 0 && (
+                <div className="mb-4">
+                  <p className="label-caps mb-2 flex items-center gap-1.5">
+                    <Target size={11} className="text-primary-container" /> Artilheiros
+                  </p>
+                  <div className="space-y-2">
+                    {topScorers.map((s, i) => (
+                      <HighlightRow key={s.id} pos={i + 1} player={s.players} value={s.goals} unit="G" color="primary-container" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {topAssist.length > 0 && (
+                <div>
+                  <p className="label-caps mb-2 flex items-center gap-1.5">
+                    <Handshake size={11} className="text-tertiary-container" /> Assistencias
+                  </p>
+                  <HighlightRow pos={1} player={topAssist[0].players} value={topAssist[0].assists} unit="A" color="tertiary-container" />
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-white/5">
+                <Metric small value={totalGoals} label="Gols" />
+                <Metric small value={totalAssists} label="Assist" />
+                <Metric small value={games.length} label="Jogos" />
+              </div>
+            </div>
+          )}
+
+          {/* Escalacoes */}
+          {regularTeams.length > 0 && (
+            <>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Shield size={18} className="text-primary-container" /> Escalacao
+              </h3>
+              {regularTeams.map(team => {
+                const sorted = [...(team.team_players || [])].sort((a, b) =>
+                  (POSITION_ORDER[a.players?.position] ?? 99) - (POSITION_ORDER[b.players?.position] ?? 99)
+                )
+                const hasGk = sorted.some(tp => tp.players?.position === 'goleiro')
+                const getPS = (pid) => stats.find(s => s.player_id === pid)
+
+                return (
+                  <div key={team.id} className={`glass-card p-5 ${team.won ? 'border-primary-container/40' : ''}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-white font-bold">{team.name} {team.won && '🏆'}</h4>
+                      <span className="text-xs text-on-surface-variant">{sorted.length} jog.</span>
+                    </div>
+                    {!hasGk && (
+                      <p className="text-xs text-primary-container/80 bg-primary-container/5 rounded-lg px-2 py-1.5 mb-3 border border-primary-container/15">
+                        Sem goleiro fixo. Gol revezado entre jogadores de linha.
+                      </p>
+                    )}
+                    <div className="space-y-1.5">
+                      {sorted.map(tp => {
+                        const p = tp.players
+                        const pS = getPS(tp.player_id)
+                        const chipClass = POSITION_CHIP[p?.position] || ''
+                        return (
+                          <div key={tp.player_id} className="flex items-center gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
+                            {p?.photo_url ? (
+                              <img src={p.photo_url} alt="" className="w-7 h-7 rounded-full object-cover border border-white/10" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-white/[0.05] flex items-center justify-center text-xs font-bold text-on-surface-variant">
+                                {p?.shirt_number || '?'}
+                              </div>
+                            )}
+                            <span className={`chip ${chipClass} shrink-0`}>{POSITION_LABELS[p?.position] || '---'}</span>
+                            <span className="text-sm text-white flex-1 truncate">{p?.nickname || p?.name}</span>
+                            {pS && (pS.goals > 0 || pS.assists > 0) && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {pS.goals > 0 && <span className="text-xs font-bold text-primary-container">{pS.goals}G</span>}
+                                {pS.assists > 0 && <span className="text-xs font-bold text-tertiary-container">{pS.assists}A</span>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {/* Lista de espera */}
+          {waitlist && waitlist.team_players?.length > 0 && (
+            <div className="glass-card p-5">
+              <h4 className="label-caps mb-3">Lista de Espera ({waitlist.team_players.length})</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {waitlist.team_players.map(tp => (
+                  <span key={tp.player_id} className="text-xs bg-white/[0.04] border border-white/10 text-on-surface-variant px-2.5 py-1 rounded-md">
+                    {tp.players?.nickname || tp.players?.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Metric({ value, label, highlight, small }) {
+  return (
+    <div>
+      <p className={`${small ? 'text-lg' : 'text-2xl lg:text-3xl'} font-extrabold tabular-nums ${highlight ? 'text-primary-container' : 'text-white'}`}>
+        {value}
+      </p>
+      <p className="label-caps mt-0.5">{label}</p>
+    </div>
+  )
+}
+
+function HighlightRow({ pos, player, value, unit, color }) {
+  const badgeColors = {
+    1: 'bg-primary-container/20 text-primary-container',
+    2: 'bg-white/10 text-white/80',
+    3: 'bg-amber-700/20 text-amber-700',
+  }
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${badgeColors[pos] || badgeColors[3]}`}>{pos}</div>
+      {player?.photo_url ? (
+        <img src={player.photo_url} alt="" className="w-7 h-7 rounded-full object-cover border border-white/10" />
+      ) : (
+        <div className="w-7 h-7 rounded-full bg-white/[0.05] flex items-center justify-center text-[10px] font-bold text-on-surface-variant">
+          {(player?.nickname || player?.name || '?').slice(0, 2).toUpperCase()}
         </div>
       )}
+      <span className="text-sm text-white flex-1 truncate">{player?.nickname || player?.name}</span>
+      <span className={`text-sm font-bold text-${color} tabular-nums`}>{value}{unit}</span>
     </div>
   )
 }
