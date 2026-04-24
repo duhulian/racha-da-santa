@@ -714,41 +714,78 @@ function PlayersTab({ players, onReload }) {
     setUploadingPhoto(playerId)
 
     try {
+      console.log('[UPLOAD] Iniciando para jogador:', playerId, 'arquivo original:', file.name, file.size, 'bytes')
+
       // 1. Redimensiona/comprime a foto no navegador (400x400, JPEG 80%)
       const resizedBlob = await resizeImage(file, 400, 0.8)
+      console.log('[UPLOAD] Resize feito. Novo tamanho:', resizedBlob.size, 'bytes')
 
-      // 2. Nome UNICO por upload (playerId + timestamp) -> mata cache definitivamente
+      // 2. Nome UNICO por upload
       const timestamp = Date.now()
       const fileName = `${playerId}_${timestamp}.jpg`
+      console.log('[UPLOAD] Nome do arquivo:', fileName)
 
-      // 3. Remove fotos antigas do jogador (todas as variacoes)
-      const { data: existing } = await supabase.storage.from('avatars').list('', { limit: 1000 })
-      if (existing) {
-        const toDelete = existing
-          .filter(f => f.name.startsWith(`${playerId}.`) || f.name.startsWith(`${playerId}_`))
-          .map(f => f.name)
-        if (toDelete.length > 0) {
-          await supabase.storage.from('avatars').remove(toDelete)
+      // 3. Remove fotos antigas do jogador (nao bloqueia se falhar)
+      try {
+        const { data: existing, error: listErr } = await supabase.storage.from('avatars').list('', { limit: 1000 })
+        if (listErr) console.warn('[UPLOAD] Aviso ao listar:', listErr.message)
+        if (existing) {
+          const toDelete = existing
+            .filter(f => f.name.startsWith(`${playerId}.`) || f.name.startsWith(`${playerId}_`))
+            .map(f => f.name)
+          if (toDelete.length > 0) {
+            console.log('[UPLOAD] Deletando antigas:', toDelete)
+            await supabase.storage.from('avatars').remove(toDelete)
+          }
         }
+      } catch (cleanupErr) {
+        console.warn('[UPLOAD] Erro ao limpar antigas (ignorando):', cleanupErr.message)
       }
 
       // 4. Sobe a foto nova
+      console.log('[UPLOAD] Enviando para o bucket...')
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, resizedBlob, {
         upsert: true,
         contentType: 'image/jpeg',
         cacheControl: '3600'
       })
       if (uploadError) {
+        console.error('[UPLOAD] Erro ao subir:', uploadError)
         alert('Erro ao subir foto: ' + uploadError.message)
         setUploadingPhoto('')
         return
       }
+      console.log('[UPLOAD] Foto enviada com sucesso ao bucket')
 
-      // 5. Atualiza URL publica no banco
+      // 5. Atualiza URL publica no banco (AGORA CAPTURANDO ERRO)
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
       const photoUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}`
-      await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+      console.log('[UPLOAD] URL gerada:', photoUrl)
+      console.log('[UPLOAD] Atualizando banco de dados...')
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('players')
+        .update({ photo_url: photoUrl })
+        .eq('id', playerId)
+        .select()
+
+      if (updateError) {
+        console.error('[UPLOAD] Erro ao atualizar banco:', updateError)
+        alert('Foto subiu mas nao consegui salvar no banco: ' + updateError.message + '\n\nDetalhe: ' + (updateError.details || 'sem detalhes') + '\nCodigo: ' + (updateError.code || 'sem codigo'))
+        setUploadingPhoto('')
+        return
+      }
+
+      if (!updateData || updateData.length === 0) {
+        console.error('[UPLOAD] UPDATE nao retornou linhas. Provavel bloqueio de RLS.')
+        alert('Foto subiu mas o banco nao retornou confirmacao. Policy RLS pode estar bloqueando o UPDATE.')
+        setUploadingPhoto('')
+        return
+      }
+
+      console.log('[UPLOAD] Banco atualizado com sucesso:', updateData[0])
     } catch (err) {
+      console.error('[UPLOAD] Erro fatal:', err)
       alert('Erro ao processar foto: ' + err.message)
     }
 
