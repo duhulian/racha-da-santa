@@ -1,119 +1,152 @@
-# Racha Da Santa v8.0 - Novo Layout
+# Racha Da Santa v9.0
 
-Redesign completo do app aplicando o design system "Elite Tactical Interface".
+Segunda rodada de atualizacoes com perfil FIFA, sorteio balanceado e upload de foto corrigido.
 
-## O que mudou
+## O que mudou nessa versao
 
-O visual foi reconstruido do zero, mantendo 100% das funcionalidades originais.
+### Novo
+1. **Tela de perfil do jogador estilo FIFA** com card de overall, stats PAC/SHO/PAS/DRI/DEF/PHY, foto em circulo dourado, nacionalidade (bandeira) e historico dos ultimos 5 rachas
+2. **Stats FIFA editaveis** por jogador no painel admin (com sliders 40-99)
+3. **Sorteio balanceado por overall**: algoritmo distribui jogadores alternando times, comecando pelos de overall mais alto, respeitando 1 goleiro por time
+4. **Upload de foto corrigido**: agora redimensiona para 400x400 no navegador antes de subir, gera nome unico por upload (mata cache) e limpa fotos antigas
+5. **Next Match card com contador regressivo** (dias, horas, minutos) no topo da home
+6. **Player of the Month** baseado no desempenho dos ultimos 30 dias
+7. **Overall visivel no card de cada jogador** no elenco (clicavel para o perfil)
+8. **Ordenacao do elenco** por Overall, Numero ou Nome
+9. **Nome, local e horario do racha** editaveis pelo admin
 
-### Visual
-Paleta escura premium com fundo #0A0E17, dourado vibrante e acentos neon.
-Fonte Inter (Google Fonts).
-Cards com glassmorphism (transparencia + blur + borda fina).
-Sidebar vertical no desktop, bottom nav no mobile.
-Tipografia em escalas definidas (display-xl, headline, body, label-caps).
+### Regras atualizadas
+- **Time agora tem 6 jogadores**: 1 goleiro + 5 de linha (antes eram 7)
+- Duracao: 1h30 (apenas informativo)
+- Tempo por partida: 7 min (mantido)
 
-### Estrutura
-Sidebar fixa no desktop com logo, menu de 4 a 5 abas e botao de login/logout no rodape.
-No mobile, header superior compacto mais bottom nav com icones grandes.
-Home em bento grid (proximo racha + stats + rachas recentes + top 5 artilheiros/assists).
-Rankings com podio visual para top 3 mais lista dos demais.
-Elenco com cards coloridos por posicao (dourado/azul/verde/vermelho).
-Detalhe do racha com tabela de classificacao completa (J/V/E/D/SG/PTS).
-Admin com tabs em pill group e layouts otimizados para cada aba.
+### O que NAO mudou
+- Schema do banco (apenas adicionou campos, nao mexeu nos existentes)
+- Variaveis de ambiente da Vercel
+- Admins cadastrados
+- Logica de confirmacao, WhatsApp, importacao de historico
+- Autenticacao e RLS
 
-### Bug corrigido
-A rota `/racha/:id` estava divergente do parametro `matchId` usado no `MatchDetail.jsx`, impedindo a pagina de carregar. Corrigido para `/racha/:matchId`.
+## Passo a passo para subir
 
-### Arquivo novo
-Foi criado o `src/components/MatchList.jsx` (que era importado no `App.jsx` mas estava faltando). A lista agrupa rachas por mes e ano com cards clicaveis.
+### 1. Rodar o SQL de migracao no Supabase (ESSENCIAL)
 
-## O que NAO mudou
+Esse script **nao apaga nada**. Ele apenas adiciona campos novos com valores padrao.
 
-O schema do Supabase esta identico (tabelas players, matches, confirmations, teams, team_players, match_stats, games, game_goals).
-As variaveis de ambiente continuam as mesmas (`VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`).
-As abas da navegacao estao preservadas (Inicio, Rachas, Rankings, Elenco, Admin).
-Todas as funcionalidades estao mantidas: sorteio de 2 a 4 times, sistema de jogos de 7 min, revezamento, upload de foto no bucket avatars, confirmacao via token, envio para WhatsApp, importacao de historico, RLS, autenticacao admin.
-Os 4 admins cadastrados continuam com os mesmos UIDs no Supabase (Eduardo/Duzao, Antonio, Raphael/R11, Pedro).
+1. Abra o Supabase: https://supabase.com/dashboard
+2. Entre no projeto
+3. Va em **SQL Editor** no menu lateral
+4. Clica em "New query"
+5. Abra o arquivo `supabase_v9_migration.sql` deste ZIP e **copie todo o conteudo**
+6. Cola no SQL Editor
+7. Clica em **Run** (ou Ctrl+Enter)
+8. Deve aparecer "Success. No rows returned"
 
-## Antes de subir para o GitHub
+Apos rodar, todos os jogadores existentes passam a ter overall = 70 e stats = 70 por padrao. Voce pode ajustar individualmente pelo painel Admin.
 
-### 1. Faca backup no GitHub (ESSENCIAL)
+### 2. Subir o codigo no GitHub
 
-No seu repositorio `duhulian/racha-da-santa`, crie uma branch de backup:
+Voce ja tem o clone em `C:\Users\edu_d\Downloads\racha-da-santa` e esta na branch `novo-layout`.
 
-No GitHub pelo navegador, clique no seletor de branch (onde aparece `main`), digite `backup-antes-novo-layout` e clique em "Create branch". Isso salva o estado atual caso algo de errado.
-
-### 2. Crie uma branch de trabalho
-
-Ainda no GitHub, crie outra branch chamada `novo-layout` a partir da `main`. Voce vai subir este ZIP nela primeiro, testar na Vercel (preview deployment) e so depois fazer merge na `main`.
-
-### 3. Substitua os arquivos
-
-Baixe este ZIP, extraia e substitua os arquivos do seu repositorio local pelos que estao aqui dentro. Depois:
+1. Extraia este ZIP em qualquer lugar
+2. Entre na pasta `racha-da-santa` que saiu do ZIP
+3. Seleciona tudo que esta dentro (Ctrl+A) e copia (Ctrl+C)
+4. Cola dentro de `C:\Users\edu_d\Downloads\racha-da-santa`, substituindo arquivos
+5. No CMD, dentro da pasta `C:\Users\edu_d\Downloads\racha-da-santa`, rode um por vez:
 
 ```
-git checkout -b novo-layout
 git add .
-git commit -m "feat: redesign completo para Elite Tactical Interface"
+git commit -m "v9 perfil FIFA sorteio balanceado upload de foto"
 git push origin novo-layout
 ```
 
-A Vercel vai criar um preview deployment automatico dessa branch. Teste la antes de fazer merge na main.
+### 3. Aguardar deploy da Vercel
 
-## NAO precisa mexer
+A Vercel vai fazer build automatico da branch `novo-layout`. Acesse https://vercel.com/dashboard, abra o projeto `racha-da-santa`, va em **Deployments** e espere o status virar **Ready**.
 
-No banco Supabase (schema idêntico, so adiciona as tabelas `games` e `game_goals` caso ainda nao existam, com `create table if not exists`).
-Nas variaveis de ambiente da Vercel (`VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`).
-Nos admins cadastrados (os UIDs estao intactos).
-Nas imagens `public/logo.png`, `public/icon-192.png` e `public/icon-512.png` (MANTENHA as que ja existem no repositorio, nao estao neste ZIP pois sao binarios).
-
-## Testar localmente antes de subir
+Importante: voce vai precisar testar no link **de preview** da branch novo-layout, nao no site real. O link de preview tem esse formato:
 
 ```
-npm install
-npm run dev
+racha-da-santa-git-novo-layout-duhulian.vercel.app
 ```
 
-Abre em http://localhost:5173. Confira se o login admin funciona, se os rachas carregam, se a confirmacao abre pelo link, se o sorteio gera times e se o sistema de jogos de 7 min registra gols.
+### 4. Ajustar as stats FIFA dos jogadores
 
-## Estrutura do projeto
+Apos testar e gostar do resultado, entra no painel Admin, aba **Jogadores**, e clica no lapis de cada jogador. Agora tem os campos de Overall, PAC, SHO, PAS, DRI, DEF, PHY e Nacionalidade.
+
+Exemplo de valores tipicos:
+- Goleiro forte: overall 80, DEF 85, PHY 78, demais 60-70
+- Meia classico: overall 82, PAS 88, DRI 80, SHO 75, demais 70-75
+- Atacante artilheiro: overall 83, SHO 88, PAC 82, DRI 78, DEF 55, demais 70
+- Zagueiro: overall 78, DEF 85, PHY 80, PAC 70, demais 65
+
+Os valores iniciais (todos em 70) ja geram sorteios funcionais. Voce vai refinando com o tempo.
+
+### 5. Testar o novo sorteio balanceado
+
+Crie um racha de teste, confirme uns 12-14 jogadores, clique em **Sortear 2 times**. Agora o algoritmo:
+1. Coloca 1 goleiro por time (se tiver)
+2. Distribui os outros alternando os times, sempre dando o jogador de overall mais alto pro time com menor soma de overall
+3. O resultado sao times com soma de overall praticamente igual
+
+Se nao gostar do sorteio, clica de novo em Sortear. Como os jogadores de cada overall ficam ordenados, o resultado e sempre o mesmo para os mesmos jogadores (determinístico).
+
+### 6. Testar o upload de foto
+
+Entra no Admin aba Jogadores, clica no icone de camera no canto da foto de qualquer jogador, seleciona uma foto. Ele:
+- Redimensiona automaticamente para 400x400 (corta quadrado no centro)
+- Comprime em JPEG 80%
+- Sobe com nome unico (mata cache antigo)
+- Atualiza na tela imediatamente
+
+Se a foto ainda aparecer antiga, da refresh forcado no navegador (Ctrl+Shift+R) uma vez.
+
+## Funcionalidades das telas de referencia que ainda NAO estao
+
+Das tres imagens que voce mandou, eu deixei de fora (requer decisao sua):
+
+- **Treasury Overview** (mensalidades) - sistema novo grande, precisa tabela e logica
+- **Club News** - precisa sistema de posts
+- **Badge Room** - precisa sistema de conquistas
+- **Rating individual por partida** (8.5, 7.2, 6.0) - tem o campo no banco mas nao tem UI
+
+Se quiser alguma dessas, me avisa qual primeiro.
+
+## Estrutura de arquivos
 
 ```
 racha-da-santa/
 ├── public/
-│   ├── favicon.svg        (novo, dourado)
-│   ├── manifest.json      (atualizado: theme_color)
-│   └── sw.js              (cache v8)
+│   ├── favicon.svg
+│   ├── manifest.json
+│   └── sw.js                (v9, ignora cache do storage)
 ├── src/
-│   ├── App.jsx            (rota matchId corrigida)
+│   ├── App.jsx              (nova rota /jogador/:playerId)
 │   ├── main.jsx
-│   ├── index.css          (Inter, glassmorphism)
+│   ├── index.css
 │   ├── lib/
 │   │   └── supabase.js
 │   └── components/
-│       ├── Layout.jsx           (sidebar + bottom nav)
-│       ├── Home.jsx             (bento grid)
-│       ├── Rankings.jsx         (podio)
-│       ├── MatchList.jsx        (NOVO)
+│       ├── Layout.jsx
+│       ├── Home.jsx               (Next Match + countdown + Player of the Month)
+│       ├── Rankings.jsx
+│       ├── MatchList.jsx
 │       ├── MatchDetail.jsx
-│       ├── Players.jsx          (cards por posicao)
+│       ├── Players.jsx            (overall + clicavel para perfil)
+│       ├── PlayerProfile.jsx      (NOVO - perfil FIFA)
 │       ├── Confirm.jsx
 │       ├── AdminLogin.jsx
-│       ├── Admin.jsx            (4 sub-abas)
-│       ├── Login.jsx            (dormente, nao importado)
-│       ├── MatchDay.jsx         (dormente, nao importado)
-│       └── Profile.jsx          (dormente, nao importado)
-├── index.html             (Inter do Google Fonts)
-├── package.json           (v8.0.0)
-├── tailwind.config.js     (nova paleta + tokens)
+│       ├── Admin.jsx              (stats FIFA + sorteio balanceado + upload com resize)
+│       ├── Login.jsx              (dormente)
+│       ├── MatchDay.jsx           (dormente)
+│       └── Profile.jsx            (dormente)
+├── index.html
+├── package.json                   (v9.0.0)
+├── tailwind.config.js
 ├── vite.config.js
 ├── postcss.config.js
 ├── vercel.json
-├── supabase_v2.sql        (schema completo)
-└── README.md              (este arquivo)
+├── supabase_v2.sql                (schema completo v7 + v9)
+├── supabase_v9_migration.sql      (APENAS a migracao v9, use este)
+└── README.md
 ```
-
-## Suporte
-
-Se algo nao funcionar apos subir, reverta para a branch de backup que voce criou no passo 1. A branch `main` continua intocada ate voce fazer o merge manualmente.

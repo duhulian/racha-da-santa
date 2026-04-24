@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Plus, Shuffle, Save, Trophy, Trash2, Link as LinkIcon, Share2, Check, Pencil, Camera, X, History, Square, ChevronDown, Calendar, Users, Swords, Shield } from 'lucide-react'
 
-const TEAM_SIZE = 7
+const TEAM_SIZE = 6
 
 export default function Admin() {
   const [tab, setTab] = useState('match')
@@ -78,6 +78,9 @@ export default function Admin() {
 function MatchTab({ matches, onReload }) {
   const [newDate, setNewDate] = useState('')
   const [notes, setNotes] = useState('')
+  const [matchName, setMatchName] = useState('')
+  const [location, setLocation] = useState('Arena Santa')
+  const [matchTime, setMatchTime] = useState('20:00')
   const [saving, setSaving] = useState(false)
   const [copiedId, setCopiedId] = useState('')
   const [numTeams, setNumTeams] = useState(2)
@@ -86,8 +89,17 @@ function MatchTab({ matches, onReload }) {
     if (!newDate) return
     setSaving(true)
     const { data: me } = await supabase.from('players').select('id').eq('user_id', (await supabase.auth.getUser()).data.user.id).single()
-    await supabase.from('matches').insert({ date: newDate, notes: notes || null, created_by: me.id, status: 'open' })
-    setNewDate(''); setNotes(''); setSaving(false); onReload()
+    await supabase.from('matches').insert({
+      date: newDate,
+      notes: notes || null,
+      name: matchName || null,
+      location: location || null,
+      match_time: matchTime || null,
+      created_by: me.id,
+      status: 'open'
+    })
+    setNewDate(''); setNotes(''); setMatchName(''); setLocation('Arena Santa'); setMatchTime('20:00')
+    setSaving(false); onReload()
   }
 
   function getConfirmLink(token) { return `${window.location.origin}/confirmar/${token}` }
@@ -111,31 +123,75 @@ function MatchTab({ matches, onReload }) {
       alert(`Precisa de pelo menos ${numTeams * 2} confirmados.`)
       return
     }
+
+    // Busca os jogadores completos com overall e posicao
+    const { data: playersFull } = await supabase
+      .from('players')
+      .select('id, name, position, overall')
+      .in('id', confs.map(c => c.player_id))
+
+    if (!playersFull) return
+
+    // SORTEIO BALANCEADO por overall + posicao
+    // 1. Separa goleiros dos demais
+    const goleiros = playersFull.filter(p => p.position === 'goleiro')
+      .sort((a, b) => (b.overall || 70) - (a.overall || 70))
+    const outros = playersFull.filter(p => p.position !== 'goleiro')
+      .sort((a, b) => (b.overall || 70) - (a.overall || 70))
+
+    // 2. Distribui 1 goleiro por time (se tiver)
+    const teams = Array.from({ length: numTeams }, () => [])
+    for (let i = 0; i < numTeams; i++) {
+      if (goleiros[i]) teams[i].push(goleiros[i].id)
+    }
+    // Goleiros excedentes entram no pool geral
+    const allOthers = [...outros, ...goleiros.slice(numTeams)]
+      .sort((a, b) => (b.overall || 70) - (a.overall || 70))
+
+    // 3. Snake draft: 1->A, 2->B, 3->C, 4->C, 5->B, 6->A, 7->A, 8->B...
+    // Distribui sempre pro time com menos jogadores e menor overall acumulado
+    function teamOverall(teamIds) {
+      return teamIds.reduce((s, id) => s + (playersFull.find(p => p.id === id)?.overall || 70), 0)
+    }
+
+    for (const player of allOthers) {
+      // Times que ainda tem vaga
+      const available = teams
+        .map((t, idx) => ({ idx, size: t.length, overall: teamOverall(t) }))
+        .filter(t => t.size < TEAM_SIZE)
+
+      if (available.length === 0) break // Todos os times cheios, vai pra lista de espera
+
+      // Ordena por tamanho asc, depois por overall acumulado asc (pega o time mais fraco primeiro)
+      available.sort((a, b) => a.size - b.size || a.overall - b.overall)
+      teams[available[0].idx].push(player.id)
+    }
+
+    // 4. Lista de espera: quem nao foi alocado
+    const allocated = new Set(teams.flat())
+    const waitlist = playersFull.filter(p => !allocated.has(p.id)).map(p => p.id)
+
+    // Remove times antigos
     const { data: oldTeams } = await supabase.from('teams').select('id').eq('match_id', matchId)
     if (oldTeams) {
       for (const t of oldTeams) { await supabase.from('team_players').delete().eq('team_id', t.id) }
       await supabase.from('teams').delete().eq('match_id', matchId)
     }
-    const ids = confs.map(c => c.player_id)
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[ids[i], ids[j]] = [ids[j], ids[i]]
-    }
-    const total = numTeams * TEAM_SIZE
-    const tp = ids.slice(0, Math.min(total, ids.length))
-    const wl = ids.slice(Math.min(total, ids.length))
+
+    // Cria os times
     const names = ['Time A', 'Time B', 'Time C', 'Time D']
     for (let t = 0; t < numTeams; t++) {
+      if (teams[t].length === 0) continue
       const { data: team } = await supabase.from('teams').insert({ match_id: matchId, name: names[t] }).select().single()
-      const s = t * TEAM_SIZE
-      const e = Math.min(s + TEAM_SIZE, tp.length)
-      const pl = tp.slice(s, e)
-      if (pl.length > 0) await supabase.from('team_players').insert(pl.map(pid => ({ team_id: team.id, player_id: pid })))
+      await supabase.from('team_players').insert(teams[t].map(pid => ({ team_id: team.id, player_id: pid })))
     }
-    if (wl.length > 0) {
+
+    // Lista de espera
+    if (waitlist.length > 0) {
       const { data: w } = await supabase.from('teams').insert({ match_id: matchId, name: 'Lista de Espera' }).select().single()
-      await supabase.from('team_players').insert(wl.map(pid => ({ team_id: w.id, player_id: pid })))
+      await supabase.from('team_players').insert(waitlist.map(pid => ({ team_id: w.id, player_id: pid })))
     }
+
     await supabase.from('matches').update({ status: 'sorted' }).eq('id', matchId)
     onReload()
   }
@@ -165,8 +221,24 @@ function MatchTab({ matches, onReload }) {
 
           <div className="space-y-3">
             <div>
-              <label className="label-caps mb-1.5 block">Data</label>
-              <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} className="input-base" />
+              <label className="label-caps mb-1.5 block">Nome do racha (opcional)</label>
+              <input type="text" value={matchName} onChange={e => setMatchName(e.target.value)} className="input-base"
+                placeholder="Ex: Racha Final, Racha do Ano..." />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label-caps mb-1.5 block">Data</label>
+                <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} className="input-base" />
+              </div>
+              <div>
+                <label className="label-caps mb-1.5 block">Horario</label>
+                <input type="time" value={matchTime} onChange={e => setMatchTime(e.target.value)} className="input-base" />
+              </div>
+            </div>
+            <div>
+              <label className="label-caps mb-1.5 block">Local</label>
+              <input type="text" value={location} onChange={e => setLocation(e.target.value)} className="input-base"
+                placeholder="Arena Santa" />
             </div>
             <div>
               <label className="label-caps mb-1.5 block">Observacoes (opcional)</label>
@@ -231,7 +303,7 @@ function MatchTab({ matches, onReload }) {
                       </select>
                       <button onClick={() => sortTeams(match.id)}
                         className="flex-1 btn-primary py-2 text-sm flex items-center justify-center gap-1.5">
-                        <Shuffle size={14} /> Sortear {numTeams}x{TEAM_SIZE}
+                        <Shuffle size={14} /> Sortear {numTeams} times ({TEAM_SIZE} por time)
                       </button>
                     </div>
                   )}
@@ -576,6 +648,14 @@ function PlayersTab({ players, onReload }) {
   const [editingPlayer, setEditingPlayer] = useState(null)
   const [name, setName] = useState(''); const [nickname, setNickname] = useState('')
   const [position, setPosition] = useState(''); const [shirtNumber, setShirtNumber] = useState('')
+  const [nationality, setNationality] = useState('BR')
+  const [overall, setOverall] = useState(70)
+  const [pace, setPace] = useState(70)
+  const [shooting, setShooting] = useState(70)
+  const [passing, setPassing] = useState(70)
+  const [dribbling, setDribbling] = useState(70)
+  const [defending, setDefending] = useState(70)
+  const [physical, setPhysical] = useState(70)
   const [saving, setSaving] = useState(false); const [uploadingPhoto, setUploadingPhoto] = useState('')
 
   const mensalistas = players.filter(p => p.player_type === 'mensalista')
@@ -586,23 +666,44 @@ function PlayersTab({ players, onReload }) {
     setEditingPlayer(p)
     setName(p.name); setNickname(p.nickname || '')
     setPosition(p.position || ''); setShirtNumber(p.shirt_number ? String(p.shirt_number) : '')
+    setNationality(p.nationality || 'BR')
+    setOverall(p.overall || 70)
+    setPace(p.pace || 70); setShooting(p.shooting || 70); setPassing(p.passing || 70)
+    setDribbling(p.dribbling || 70); setDefending(p.defending || 70); setPhysical(p.physical || 70)
     setShowForm(true)
   }
   function startNew() {
     setEditingPlayer(null)
     setName(''); setNickname(''); setPosition(''); setShirtNumber('')
+    setNationality('BR')
+    setOverall(70); setPace(70); setShooting(70); setPassing(70); setDribbling(70); setDefending(70); setPhysical(70)
     setShowForm(true)
   }
   function cancelForm() {
     setEditingPlayer(null)
     setName(''); setNickname(''); setPosition(''); setShirtNumber('')
+    setNationality('BR')
+    setOverall(70); setPace(70); setShooting(70); setPassing(70); setDribbling(70); setDefending(70); setPhysical(70)
     setShowForm(false)
   }
 
   async function savePlayer() {
     if (!name.trim() || !position) return
     setSaving(true)
-    const data = { name: name.trim(), nickname: nickname.trim() || null, position, shirt_number: shirtNumber ? parseInt(shirtNumber) : null }
+    const data = {
+      name: name.trim(),
+      nickname: nickname.trim() || null,
+      position,
+      shirt_number: shirtNumber ? parseInt(shirtNumber) : null,
+      nationality,
+      overall: parseInt(overall) || 70,
+      pace: parseInt(pace) || 70,
+      shooting: parseInt(shooting) || 70,
+      passing: parseInt(passing) || 70,
+      dribbling: parseInt(dribbling) || 70,
+      defending: parseInt(defending) || 70,
+      physical: parseInt(physical) || 70,
+    }
     if (editingPlayer) await supabase.from('players').update(data).eq('id', editingPlayer.id)
     else await supabase.from('players').insert({ ...data, player_type: 'mensalista', role: 'player' })
     cancelForm(); setSaving(false); onReload()
@@ -611,15 +712,78 @@ function PlayersTab({ players, onReload }) {
   async function handlePhotoUpload(playerId, file) {
     if (!file) return
     setUploadingPhoto(playerId)
-    const ext = file.name.split('.').pop().toLowerCase()
-    const fileName = `${playerId}.${ext}`
-    await supabase.storage.from('avatars').remove([`${playerId}.jpg`, `${playerId}.jpeg`, `${playerId}.png`, `${playerId}.webp`])
-    const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true, contentType: file.type, cacheControl: '0' })
-    if (uploadError) { alert('Erro ao subir foto: ' + uploadError.message); setUploadingPhoto(''); return }
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    const photoUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}?t=${Date.now()}`
-    await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
-    setUploadingPhoto(''); onReload()
+
+    try {
+      // 1. Redimensiona/comprime a foto no navegador (400x400, JPEG 80%)
+      const resizedBlob = await resizeImage(file, 400, 0.8)
+
+      // 2. Nome UNICO por upload (playerId + timestamp) -> mata cache definitivamente
+      const timestamp = Date.now()
+      const fileName = `${playerId}_${timestamp}.jpg`
+
+      // 3. Remove fotos antigas do jogador (todas as variacoes)
+      const { data: existing } = await supabase.storage.from('avatars').list('', { limit: 1000 })
+      if (existing) {
+        const toDelete = existing
+          .filter(f => f.name.startsWith(`${playerId}.`) || f.name.startsWith(`${playerId}_`))
+          .map(f => f.name)
+        if (toDelete.length > 0) {
+          await supabase.storage.from('avatars').remove(toDelete)
+        }
+      }
+
+      // 4. Sobe a foto nova
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, resizedBlob, {
+        upsert: true,
+        contentType: 'image/jpeg',
+        cacheControl: '3600'
+      })
+      if (uploadError) {
+        alert('Erro ao subir foto: ' + uploadError.message)
+        setUploadingPhoto('')
+        return
+      }
+
+      // 5. Atualiza URL publica no banco
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const photoUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}`
+      await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+    } catch (err) {
+      alert('Erro ao processar foto: ' + err.message)
+    }
+
+    setUploadingPhoto('')
+    onReload()
+  }
+
+  // Redimensiona imagem no navegador antes de subir
+  function resizeImage(file, maxSize, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          // Corta quadrado no meio da imagem
+          const side = Math.min(img.width, img.height)
+          const sx = (img.width - side) / 2
+          const sy = (img.height - side) / 2
+          canvas.width = maxSize
+          canvas.height = maxSize
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize)
+          canvas.toBlob(
+            (blob) => { if (blob) resolve(blob); else reject(new Error('Falha ao gerar imagem')) },
+            'image/jpeg',
+            quality
+          )
+        }
+        img.onerror = () => reject(new Error('Falha ao ler imagem'))
+        img.src = e.target.result
+      }
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'))
+      reader.readAsDataURL(file)
+    })
   }
 
   async function promoteToMensalista(pid) {
@@ -671,7 +835,45 @@ function PlayersTab({ players, onReload }) {
               <label className="label-caps mb-1.5 block">Numero da camisa</label>
               <input type="number" value={shirtNumber} onChange={e => setShirtNumber(e.target.value)} className="input-base" placeholder="10" />
             </div>
+            <div>
+              <label className="label-caps mb-1.5 block">Nacionalidade</label>
+              <select value={nationality} onChange={e => setNationality(e.target.value)} className="select-base">
+                <option value="BR">🇧🇷 Brasil</option>
+                <option value="PT">🇵🇹 Portugal</option>
+                <option value="AR">🇦🇷 Argentina</option>
+                <option value="UY">🇺🇾 Uruguai</option>
+                <option value="CO">🇨🇴 Colombia</option>
+                <option value="ES">🇪🇸 Espanha</option>
+                <option value="IT">🇮🇹 Italia</option>
+                <option value="FR">🇫🇷 Franca</option>
+                <option value="DE">🇩🇪 Alemanha</option>
+                <option value="NL">🇳🇱 Holanda</option>
+                <option value="EN">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra</option>
+                <option value="US">🇺🇸 EUA</option>
+                <option value="MX">🇲🇽 Mexico</option>
+                <option value="JP">🇯🇵 Japao</option>
+              </select>
+            </div>
+            <div>
+              <label className="label-caps mb-1.5 block">Overall geral (40-99)</label>
+              <input type="number" min="40" max="99" value={overall} onChange={e => setOverall(e.target.value)} className="input-base" />
+            </div>
           </div>
+
+          {/* Stats FIFA */}
+          <div className="mt-4 pt-4 border-t border-white/5">
+            <p className="label-caps mb-3 text-primary-container">Stats FIFA (40-99)</p>
+            <p className="text-xs text-on-surface-variant mb-3">Essas notas sao usadas para o sorteio balanceado dos times.</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <StatInput label="PAC (Velocidade)" value={pace} onChange={setPace} />
+              <StatInput label="SHO (Chute)" value={shooting} onChange={setShooting} />
+              <StatInput label="PAS (Passe)" value={passing} onChange={setPassing} />
+              <StatInput label="DRI (Drible)" value={dribbling} onChange={setDribbling} />
+              <StatInput label="DEF (Defesa)" value={defending} onChange={setDefending} />
+              <StatInput label="PHY (Fisico)" value={physical} onChange={setPhysical} />
+            </div>
+          </div>
+
           <button onClick={savePlayer} disabled={saving || !name.trim() || !position}
             className="btn-primary w-full py-3 mt-4">
             {saving ? 'Salvando...' : editingPlayer ? 'Salvar alteracoes' : 'Cadastrar jogador'}
@@ -699,6 +901,11 @@ function PlayersTab({ players, onReload }) {
                     onChange={e => handlePhotoUpload(p.id, e.target.files[0])}
                     disabled={uploadingPhoto === p.id} />
                 </label>
+                {uploadingPhoto === p.id && (
+                  <div className="absolute inset-0 bg-background/80 rounded-full flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{p.name}</p>
@@ -708,7 +915,11 @@ function PlayersTab({ players, onReload }) {
                   {p.shirt_number && <span className="text-[11px] text-on-surface-variant">#{p.shirt_number}</span>}
                 </div>
               </div>
-              <div className="flex gap-1 shrink-0">
+              <div className="text-center px-2 shrink-0">
+                <p className="text-xl font-black text-primary-container tabular-nums leading-none">{p.overall || 70}</p>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant mt-0.5">OVR</p>
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
                 <button onClick={() => startEdit(p)} className="p-2 rounded-lg bg-tertiary-container/10 text-tertiary hover:bg-tertiary-container/20">
                   <Pencil size={14} />
                 </button>
@@ -864,3 +1075,20 @@ function HistoryTab({ players, onReload }) {
     </div>
   )
 }
+
+// Input numerico para stats FIFA (slider + numero)
+function StatInput({ label, value, onChange }) {
+  const v = parseInt(value) || 70
+  const color = v >= 85 ? "text-primary-container" : v >= 75 ? "text-tertiary-container" : v >= 65 ? "text-secondary-fixed" : "text-on-surface"
+  return (
+    <div className="bg-white/[0.03] border border-white/5 rounded-xl p-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{label}</span>
+        <span className={`text-lg font-black tabular-nums ${color}`}>{v}</span>
+      </div>
+      <input type="range" min="40" max="99" value={v} onChange={e => onChange(e.target.value)}
+        className="w-full accent-[#d4af37] h-1" />
+    </div>
+  )
+}
+
