@@ -10,6 +10,7 @@ import Admin from './components/Admin'
 import Players from './components/Players'
 import MatchList from './components/MatchList'
 import MatchDetail from './components/MatchDetail'
+import PlayerProfile from './components/PlayerProfile'
 
 const AuthContext = createContext()
 
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/racha/:matchId" element={<MatchDetail />} />
           <Route path="/confirmar/:token" element={<Confirm />} />
           <Route path="/jogadores" element={<Players />} />
+          <Route path="/jogador/:playerId" element={<PlayerProfile />} />
           <Route path="/admin/login" element={
             isAdmin ? <Navigate to="/admin" /> : <AdminLogin onLogin={refreshPlayer} />
           } />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Users, Search } from 'lucide-react'
 
@@ -10,14 +11,15 @@ const POSITION_CONFIG = {
 }
 
 export default function Players() {
+  const navigate = useNavigate()
   const [players, setPlayers] = useState([])
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('overall')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.from('players').select('*').eq('active', true).eq('player_type', 'mensalista')
-      .order('position').order('shirt_number').order('name')
       .then(({ data }) => { setPlayers(data || []); setLoading(false) })
   }, [])
 
@@ -30,9 +32,14 @@ export default function Players() {
     )
   }
 
+  filtered = [...filtered].sort((a, b) => {
+    if (sortBy === 'overall') return (b.overall || 70) - (a.overall || 70)
+    if (sortBy === 'number') return (a.shirt_number || 99) - (b.shirt_number || 99)
+    return a.name.localeCompare(b.name)
+  })
+
   return (
     <div className="max-w-5xl mx-auto">
-      {/* Cabecalho */}
       <div className="flex items-end justify-between mb-6 flex-wrap gap-2">
         <div>
           <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">Elenco</h2>
@@ -46,12 +53,27 @@ export default function Players() {
         </div>
       </div>
 
-      {/* Filtros de posicao */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-3">
         <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>Todos</FilterPill>
         {Object.entries(POSITION_CONFIG).map(([key, cfg]) => (
           <FilterPill key={key} active={filter === key} onClick={() => setFilter(key)}>{cfg.label}</FilterPill>
         ))}
+      </div>
+
+      <div className="flex gap-2 mb-6 items-center">
+        <span className="text-xs text-on-surface-variant">Ordenar por:</span>
+        <button onClick={() => setSortBy('overall')}
+          className={`text-xs px-3 py-1 rounded-full transition ${sortBy === 'overall' ? 'bg-white/10 text-white' : 'text-on-surface-variant hover:text-white'}`}>
+          Overall
+        </button>
+        <button onClick={() => setSortBy('number')}
+          className={`text-xs px-3 py-1 rounded-full transition ${sortBy === 'number' ? 'bg-white/10 text-white' : 'text-on-surface-variant hover:text-white'}`}>
+          Numero
+        </button>
+        <button onClick={() => setSortBy('name')}
+          className={`text-xs px-3 py-1 rounded-full transition ${sortBy === 'name' ? 'bg-white/10 text-white' : 'text-on-surface-variant hover:text-white'}`}>
+          Nome
+        </button>
       </div>
 
       {loading ? (
@@ -65,8 +87,12 @@ export default function Players() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {filtered.map(p => {
             const pos = POSITION_CONFIG[p.position] || { label: '', short: '', chip: '', border: '' }
+            const overall = p.overall || 70
+            const overallColor = overall >= 85 ? 'text-primary-container' : overall >= 75 ? 'text-tertiary-container' : overall >= 65 ? 'text-secondary-fixed' : 'text-on-surface'
+
             return (
-              <div key={p.id} className={`glass-card p-4 flex items-center gap-3 ${pos.border} rounded-r-xl`}>
+              <button key={p.id} onClick={() => navigate(`/jogador/${p.id}`)}
+                className={`glass-card glass-card-hover text-left p-4 flex items-center gap-3 ${pos.border} rounded-r-xl`}>
                 {p.photo_url ? (
                   <img src={p.photo_url} alt="" className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0" />
                 ) : (
@@ -81,14 +107,11 @@ export default function Players() {
                     <span className={`chip ${pos.chip} mt-1.5`}>{pos.short}</span>
                   )}
                 </div>
-                {p.shirt_number && (
-                  <div className="text-right shrink-0">
-                    <span className="text-xl font-extrabold text-on-surface-variant/80 tabular-nums">
-                      {String(p.shirt_number).padStart(2, '0')}
-                    </span>
-                  </div>
-                )}
-              </div>
+                <div className="text-right shrink-0">
+                  <p className={`text-2xl font-black ${overallColor} tabular-nums leading-none`}>{overall}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mt-0.5">OVR</p>
+                </div>
+              </button>
             )
           })}
         </div>
