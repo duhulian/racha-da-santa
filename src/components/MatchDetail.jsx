@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { computeStandings } from '../lib/standings'
 import { Trophy, Target, Handshake, ArrowLeft, Shield, Swords, Calendar } from 'lucide-react'
 
 const POSITION_ORDER = { goleiro: 0, zagueiro: 1, meia: 2, atacante: 3 }
@@ -64,33 +65,8 @@ export default function MatchDetail() {
   const waitlist = teams.find(t => t.name === 'Lista de Espera')
   const winnerTeam = regularTeams.find(t => t.won)
 
-  // Classificacao
-  const classification = regularTeams.map(team => {
-    let wins = 0, draws = 0, losses = 0, goalsFor = 0, goalsAgainst = 0, gamesPlayed = 0
-
-    games.filter(g => g.status === 'finished').forEach(g => {
-      if (g.team_a_id === team.id) {
-        gamesPlayed++
-        goalsFor += g.score_a; goalsAgainst += g.score_b
-        if (g.score_a > g.score_b) wins++
-        else if (g.score_a < g.score_b) losses++
-        else draws++
-      } else if (g.team_b_id === team.id) {
-        gamesPlayed++
-        goalsFor += g.score_b; goalsAgainst += g.score_a
-        if (g.score_b > g.score_a) wins++
-        else if (g.score_b < g.score_a) losses++
-        else draws++
-      }
-    })
-
-    return {
-      id: team.id, name: team.name, won: team.won,
-      gamesPlayed, wins, draws, losses, goalsFor, goalsAgainst,
-      goalDiff: goalsFor - goalsAgainst,
-      points: wins * 3 + draws
-    }
-  }).sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor)
+  // Classificacao. Mesma regra que elege o campeao em LiveMatchControl.
+  const classification = computeStandings(regularTeams, games)
 
   const topScorers = [...stats].sort((a, b) => b.goals - a.goals).filter(s => s.goals > 0).slice(0, 3)
   const topAssist = [...stats].sort((a, b) => b.assists - a.assists).filter(s => s.assists > 0).slice(0, 1)

@@ -12,6 +12,9 @@ export default function Confirm() {
   const [avulsoName, setAvulsoName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Separado do `error`: aquele substitui a pagina inteira quando o link e
+  // invalido, e uma falha ao salvar nao pode apagar a tela de confirmacao.
+  const [saveError, setSaveError] = useState('')
   const [actionLoading, setActionLoading] = useState('')
 
   useEffect(() => { loadMatch() }, [token])
@@ -50,34 +53,25 @@ export default function Confirm() {
     setConfirmations(data || [])
   }
 
-  async function toggleConfirmation(playerId, currentStatus) {
+  // Um unico caminho de escrita para as tres transicoes (pendente, confirmado,
+  // recusado). Antes havia duas funcoes e quem estava recusado caia no ramo de
+  // insert, batendo na constraint unique(match_id, player_id): o jogador tocava
+  // no visto e nada acontecia, sem aviso.
+  async function setStatus(playerId, status) {
     setActionLoading(playerId)
-    if (currentStatus === 'confirmed') {
-      await supabase.from('confirmations').update({ status: 'declined' }).eq('match_id', match.id).eq('player_id', playerId)
-    } else if (currentStatus === 'declined') {
-      await supabase.from('confirmations').update({ status: 'confirmed' }).eq('match_id', match.id).eq('player_id', playerId)
-    } else {
-      await supabase.from('confirmations').insert({ match_id: match.id, player_id: playerId, status: 'confirmed' })
-    }
-    await loadConfirmations(match.id)
-    setActionLoading('')
-  }
-
-  async function declinePlayer(playerId) {
-    setActionLoading(playerId)
-    const existing = confirmations.find(c => c.player_id === playerId)
-    if (existing) {
-      await supabase.from('confirmations').update({ status: 'declined' }).eq('match_id', match.id).eq('player_id', playerId)
-    } else {
-      await supabase.from('confirmations').insert({ match_id: match.id, player_id: playerId, status: 'declined' })
-    }
-    await loadConfirmations(match.id)
+    setSaveError('')
+    const { error: err } = await supabase
+      .from('confirmations')
+      .upsert({ match_id: match.id, player_id: playerId, status }, { onConflict: 'match_id,player_id' })
+    if (err) setSaveError('Nao foi possivel salvar. Tente de novo.')
+    else await loadConfirmations(match.id)
     setActionLoading('')
   }
 
   async function addAvulso() {
     if (!avulsoName.trim()) return
     setActionLoading('avulso')
+    setSaveError('')
     const trimmedName = avulsoName.trim()
 
     const { data: existing } = await supabase
@@ -87,15 +81,25 @@ export default function Confirm() {
     if (existing && existing.length > 0) {
       playerId = existing[0].id
     } else {
-      const { data: newPlayer } = await supabase
+      const { data: newPlayer, error: playerErr } = await supabase
         .from('players').insert({ name: trimmedName, player_type: 'avulso', role: 'player' }).select().single()
-      if (!newPlayer) { setActionLoading(''); return }
+      if (playerErr || !newPlayer) {
+        setSaveError('Nao foi possivel cadastrar. Tente de novo.')
+        setActionLoading('')
+        return
+      }
       playerId = newPlayer.id
     }
 
-    const alreadyConfirmed = confirmations.find(c => c.player_id === playerId)
-    if (!alreadyConfirmed) {
-      await supabase.from('confirmations').insert({ match_id: match.id, player_id: playerId, status: 'confirmed' })
+    // upsert, e nao "pula se ja existe": o avulso que tinha recusado ficava
+    // preso, porque a busca antiga achava a linha declined e nao fazia nada.
+    const { error: confErr } = await supabase
+      .from('confirmations')
+      .upsert({ match_id: match.id, player_id: playerId, status: 'confirmed' }, { onConflict: 'match_id,player_id' })
+    if (confErr) {
+      setSaveError('Nao foi possivel confirmar. Tente de novo.')
+      setActionLoading('')
+      return
     }
 
     setAvulsoName('')
@@ -143,6 +147,10 @@ export default function Confirm() {
         </div>
       </div>
 
+      {saveError && (
+        <div className="glass-card p-4 text-sm text-error border border-error/30">{saveError}</div>
+      )}
+
       {/* Botao ver escalacao se sorteado/finalizado */}
       {isSortedOrFinished && (
         <button onClick={() => navigate(`/racha/${match.id}`)} className="btn-primary w-full py-3.5 flex items-center justify-center gap-2">
@@ -182,13 +190,13 @@ export default function Confirm() {
                       {p.position && <p className="text-[11px] text-on-surface-variant">{positionLabels[p.position]}</p>}
                     </div>
                     <div className="flex gap-1.5 shrink-0">
-                      <button onClick={() => toggleConfirmation(p.id, isConfirmed ? 'confirmed' : null)} disabled={isLoading}
+                      <button onClick={() => setStatus(p.id, 'confirmed')} disabled={isLoading || isConfirmed}
                         className={`p-2 rounded-lg transition ${
                           isConfirmed ? 'bg-secondary-container text-on-secondary' : 'bg-white/[0.05] text-on-surface-variant hover:text-secondary-container'
                         }`}>
                         <Check size={16} />
                       </button>
-                      <button onClick={() => declinePlayer(p.id)} disabled={isLoading}
+                      <button onClick={() => setStatus(p.id, 'declined')} disabled={isLoading || isDeclined}
                         className={`p-2 rounded-lg transition ${
                           isDeclined ? 'bg-error text-on-error' : 'bg-white/[0.05] text-on-surface-variant hover:text-error'
                         }`}>

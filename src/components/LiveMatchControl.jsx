@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { championTeamId } from '../lib/standings'
 import {
   Play, Pause, Plus, X, Zap, Clock, Target,
   Flag, AlertCircle, Users, Activity, ArrowLeft
@@ -274,15 +275,11 @@ export default function LiveMatchControl({ matchId, onClose }) {
     }))
     if (rows.length > 0) await supabase.from('match_stats').insert(rows)
 
-    // Define campeao: time com mais vitorias
-    const wins = {}
+    // Campeao: lider da mesma classificacao que aparece na tela do racha.
+    // Contar so winner_team_id ignorava saldo de gols e podia coroar um time
+    // diferente do primeiro colocado da tabela.
     const regular = teams.filter(t => t.name !== 'Lista de Espera')
-    regular.forEach(t => { wins[t.id] = 0 })
-    games.forEach(g => {
-      if (g.winner_team_id && wins[g.winner_team_id] !== undefined) wins[g.winner_team_id]++
-    })
-    const maxWins = Math.max(0, ...Object.values(wins))
-    const champId = Object.keys(wins).find(id => wins[id] === maxWins && maxWins > 0)
+    const champId = championTeamId(regular, games)
 
     for (const t of regular) {
       await supabase.from('teams').update({ won: t.id === champId }).eq('id', t.id)
