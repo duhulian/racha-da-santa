@@ -8,6 +8,167 @@ descreve a release v10.
 
 ---
 
+## 2026-09-15, revisao de producao
+
+### Pedido
+
+"faca seu diagnostico e aplique as correcoes", sob o protocolo de engenharia de
+producao. Diagnostico do codigo da v10, que ate aqui so tinha sido lido em parte.
+
+### Corrigido
+
+1. **CRITICAL. O Live Match Control nunca conseguiu iniciar um jogo.**
+   `LiveMatchControl.jsx` gravava `status: 'in_progress'` ao criar o game, mas a
+   constraint `games_status_check` no banco aceita apenas `pending`, `playing` e
+   `finished`. Todo insert era recusado pelo Postgres e o admin recebia um alerta de
+   erro. E a explicacao de `games` estar com 0 linhas em producao: o recurso central da
+   v10 estava inoperante desde que foi escrito. Passou a gravar `'playing'`.
+
+   O `supabase_v2.sql` versionado tambem estava errado, declarando
+   `default 'in_progress' check (status in ('in_progress','finished'))`, que nao e o que
+   existe no banco. Foi alinhado ao real, com nota datada, senao um ambiente novo
+   nasceria incompativel com o codigo.
+
+2. **HIGH. Baixa de mensalidade podia falhar em silencio.** `markAsPaid`,
+   `markAsUnpaid`, `deletePayment`, e as equivalentes de taxa da quadra e do
+   CommandCenter, descartavam o retorno do Supabase e recarregavam a tela do mesmo
+   jeito. Se a gravacao falhasse, a cobranca aparecia como quitada sem ter sido
+   registrada. Passaram a checar `error` e avisar.
+
+3. **MEDIUM. Data do dia saia trocada a noite.** Seis pontos usavam
+   `new Date().toISOString().split('T')[0]`, que converte para UTC antes de cortar. No
+   horario de Brasilia, das 21h a meia-noite o resultado ja e o dia seguinte: uma
+   mensalidade quitada as 22h de 30/09 era gravada como paga em 01/10, e a comparacao
+   de vencimento errava o dia. Centralizado em `src/lib/datas.js`.
+
+### Criado
+
+- `src/lib/datas.js`: `hojeISO` e `dataISO`, conversao no fuso de quem usa o app.
+- `src/lib/datas.test.mjs`: check da conversao, incluindo o caso das 22h e o
+  vencimento dia 5. Independente do fuso da maquina que roda o teste.
+
+### Alterado
+
+- `src/components/LiveMatchControl.jsx`: status do game.
+- `src/components/Treasury.jsx` e `src/components/CommandCenter.jsx`: checagem de erro
+  nas escritas de dinheiro e uso do helper de data.
+- `src/components/Home.jsx` e `src/components/Rankings.jsx`: helper de data nas janelas
+  de periodo.
+- `supabase_v2.sql`: check e default de `games.status`.
+- `package.json`: `npm test` roda os dois checks.
+
+### Decisoes
+
+- **Alinhar o codigo ao banco, nao o banco ao codigo.** Trocar `'in_progress'` por
+  `'playing'` e uma linha e nao toca em producao. Alterar a constraint mexeria no banco
+  com dados, exigiria migration e nao traria beneficio: `'playing'` ja convive com o
+  default `'pending'` que existe la.
+- **Nao removi `alert()` nem troquei por toast.** E o padrao do arquivo inteiro. Trocar
+  o mecanismo de feedback seria refatoracao nao pedida, misturada com correcao.
+- **Nao mexi nos atributos FIFA.** O banco tem check de 40 a 99 e os inputs sao
+  `type="range" min="40" max="99"`. Conferido, nao ha divergencia.
+- **Nao mexi nas outras 40 escritas sem checagem de erro.** Foram tratadas as de
+  dinheiro, onde falha silenciosa vira prejuizo. As demais entram como pendencia, para
+  nao inflar o diff desta correcao.
+
+### Validacao executada
+
+- `npm test`: passa, `standings: ok` e `datas: ok`.
+- `npm run build`: passa, 1.632 modulos, 17,83s.
+- Constraint verificada direto no Postgres de producao:
+  `games_status_check` e `CHECK (status = ANY (ARRAY['pending','playing','finished']))`.
+  Consulta de comprovacao no mesmo banco devolveu
+  `valor_antigo_passa_no_check = false`, `valor_novo_passa_no_check = true`,
+  `games_hoje = 0`.
+- Conferidos contra o banco todos os outros valores de status gravados pelo codigo
+  (`confirmations`, `matches`, `payments`): batem com os checks reais. `games` era o
+  unico divergente.
+- Varredura de artefatos de IA nos arquivos alterados: um unico apontamento, o
+  `console.log` de saida do proprio arquivo de teste, que e intencional.
+
+### Nao validado
+
+- O fluxo do Live Match Control nao foi exercitado de ponta a ponta. Provar em runtime
+  exigiria criar racha, sortear times e gravar jogos no banco de producao. A correcao
+  esta comprovada no nivel da constraint, que era exatamente onde ela falhava, nao por
+  execucao do fluxo.
+- As baixas de mensalidade corrigidas nao foram executadas: exigiria mexer em cobranca
+  real.
+- O comportamento noturno da data foi coberto por teste, nao observado em producao as
+  22h.
+
+### Pendente
+
+- Cerca de 40 escritas ao Supabase fora do modulo financeiro ainda descartam o retorno
+  de erro.
+- `Login.jsx`, `MatchDay.jsx` e `Profile.jsx` seguem orfaos. A remocao continua barrada
+  pelo controle de permissao do ambiente.
+- Achados do linter do Supabase seguem abertos: `public.rls_auto_enable()` e
+  `SECURITY DEFINER` executavel por `anon`, duas funcoes com `search_path` mutavel, e a
+  protecao contra senha vazada esta desligada no Auth.
+- O racha de 10/03/2026 tem um time com 0 jogadores e mostra 30 gols com 0 jogos, por
+  ter vindo de importacao de historico.
+
+### Riscos
+
+- Games criados a partir de agora nascem com `status = 'playing'`. Nenhum dado antigo
+  muda, porque nao existe nenhum game gravado.
+- A mudanca em `supabase_v2.sql` so afeta quem criar um ambiente novo. Bancos existentes
+  nao sao tocados por este commit.
+
+### Estrutura do projeto apos esta sessao
+
+```
+.gitignore
+CHANGELOG.md
+MANUAL-DO-USUARIO.md
+README.md
+index.html
+package-lock.json
+package.json
+postcss.config.js
+public/favicon.svg
+public/icon-192.png
+public/icon-512.png
+public/logo.png
+public/manifest.json
+public/sw.js
+src/App.jsx
+src/components/Admin.jsx
+src/components/AdminLogin.jsx
+src/components/CommandCenter.jsx
+src/components/Confirm.jsx
+src/components/Home.jsx
+src/components/Layout.jsx
+src/components/LiveMatchControl.jsx
+src/components/Login.jsx            (orfao)
+src/components/MatchDay.jsx         (orfao)
+src/components/MatchDetail.jsx
+src/components/MatchList.jsx
+src/components/MatchOperations.jsx
+src/components/PlayerProfile.jsx
+src/components/Players.jsx
+src/components/Profile.jsx          (orfao)
+src/components/Rankings.jsx
+src/components/RosterCommand.jsx
+src/components/Treasury.jsx
+src/index.css
+src/lib/datas.js
+src/lib/datas.test.mjs
+src/lib/standings.js
+src/lib/standings.test.mjs
+src/lib/supabase.js
+src/main.jsx
+supabase_v10_migration.sql
+supabase_v2.sql
+supabase_v9_migration.sql
+tailwind.config.js
+vercel.json
+vite.config.js
+```
+
+---
+
 ## 2026-09-15
 
 ### Pedido

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { dataISO } from '../lib/datas'
 import { Trophy, Target, Handshake, Award } from 'lucide-react'
 
 const PERIODS = [
@@ -32,7 +33,7 @@ export default function Rankings() {
       const selectedPeriod = PERIODS.find(p => p.key === period)
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - selectedPeriod.days)
-      const startDateStr = startDate.toISOString().split('T')[0]
+      const startDateStr = dataISO(startDate)
 
       const { data: matches } = await supabase
         .from('matches').select('id').eq('status', 'finished').gte('date', startDateStr)

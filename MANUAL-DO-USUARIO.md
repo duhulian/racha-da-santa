@@ -133,6 +133,21 @@ uma nova.
 **Sou mensalista e nao consigo entrar no admin.**
 A area de admin e so para quem organiza. Jogador nao precisa de login para nada.
 
+**Dava erro ao iniciar um jogo no controle ao vivo. (corrigido em 15/09/2026)**
+O app tentava gravar a partida com uma situacao que o banco nao aceitava, entao o jogo
+nunca comecava e aparecia uma mensagem de erro. Corrigido. Se ainda aparecer erro ao
+iniciar, o texto da mensagem diz o motivo, guarde o print.
+
+**Dei baixa numa mensalidade e ela voltou a aparecer como pendente.
+(corrigido em 15/09/2026)**
+A tela recarregava do mesmo jeito mesmo quando a gravacao falhava, entao a cobranca
+parecia quitada sem ter sido registrada. Agora, se a baixa falhar, aparece um aviso com
+o motivo e nada e dado como pago por engano.
+
+**Paguei a noite e a data ficou do dia seguinte. (corrigido em 15/09/2026)**
+Baixas feitas depois das 21h eram gravadas com a data do dia seguinte. A data agora
+segue o horario de quem esta usando o app. Registros antigos nao foram alterados.
+
 ---
 
 ## 4. Estrutura do projeto
@@ -174,6 +189,8 @@ src/components/Rankings.jsx          rankings por periodo
 src/components/RosterCommand.jsx     gestao do elenco
 src/components/Treasury.jsx          financeiro
 src/index.css
+src/lib/datas.js                     data do dia no fuso de quem usa o app
+src/lib/datas.test.mjs               check da conversao de data
 src/lib/standings.js                 regra unica de classificacao e campeao
 src/lib/standings.test.mjs           check da regra de pontuacao
 src/lib/supabase.js                  cliente do Supabase

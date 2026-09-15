@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { hojeISO, dataISO } from '../lib/datas'
 import {
   Zap, Building2, DollarSign, Users, Calendar,
   Shuffle, Plus, ChevronRight, Shield, Send, Check,
@@ -91,7 +92,7 @@ export default function CommandCenter({ onNavigate }) {
       const { count: thisMonth } = await supabase.from('matches')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'finished')
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
+        .gte('date', dataISO(thirtyDaysAgo))
 
       setStats({
         totalPlayers: totalPlayers || 0,
@@ -304,11 +305,12 @@ function OverdueItem({ payment, onReload }) {
   }
 
   async function markPaid() {
-    await supabase.from('payments').update({
+    const { error } = await supabase.from('payments').update({
       status: 'paid',
-      paid_date: new Date().toISOString().split('T')[0],
+      paid_date: hojeISO(),
       payment_method: 'pix',
     }).eq('id', payment.id)
+    if (error) { alert('Nao foi possivel dar baixa: ' + error.message); return }
     onReload()
   }
 

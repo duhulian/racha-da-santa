@@ -132,7 +132,10 @@ export default function LiveMatchControl({ matchId, onClose }) {
       team_b_id: bId,
       score_a: 0,
       score_b: 0,
-      status: 'in_progress',
+      // 'playing', nao 'in_progress': o check da tabela games no banco aceita
+      // apenas pending, playing e finished. Com 'in_progress' todo insert era
+      // recusado pela constraint e nenhum game conseguia comecar.
+      status: 'playing',
       started_at: new Date().toISOString(),
     }).select().single()
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { dataISO } from '../lib/datas'
 import { Target, Handshake, Users, Calendar, ChevronRight, MapPin, History, Trophy, Clock, Star } from 'lucide-react'
 
 export default function Home() {
@@ -100,7 +101,7 @@ export default function Home() {
       // Player of the Month: maior artilheiro dos ultimos 30 dias
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      const startDate = thirtyDaysAgo.toISOString().split('T')[0]
+      const startDate = dataISO(thirtyDaysAgo)
 
       const { data: monthMatches } = await supabase
         .from('matches').select('id').eq('status', 'finished').gte('date', startDate)

@@ -177,7 +177,10 @@ create table if not exists games (
   score_a integer default 0,
   score_b integer default 0,
   winner_team_id uuid references teams(id),
-  status text not null default 'in_progress' check (status in ('in_progress', 'finished')),
+  -- Corrigido em 15/09/2026 para refletir o banco em producao, que aceita
+  -- pending, playing e finished. O arquivo dizia 'in_progress', valor que a
+  -- constraint real recusa, e um ambiente novo saia incompativel com o codigo.
+  status text not null default 'pending' check (status in ('pending', 'playing', 'finished')),
   created_at timestamp with time zone default now()
 );
 

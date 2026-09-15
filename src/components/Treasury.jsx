@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { hojeISO, dataISO } from '../lib/datas'
 import {
   DollarSign, TrendingUp, Wallet, AlertCircle, CheckCircle2, Clock,
   Plus, X, Send, Trash2, Building2, Receipt, Check
@@ -70,7 +71,7 @@ export default function Treasury() {
 
     const [year, month] = currentMonth.split('-').map(Number)
     const dueDate = new Date(year, month - 1, 5)  // dia 5 do mes
-    const dueDateStr = dueDate.toISOString().split('T')[0]
+    const dueDateStr = dataISO(dueDate)
 
     // Busca pagamentos ja existentes desse mes
     const { data: existing } = await supabase.from('payments')
@@ -96,7 +97,7 @@ export default function Treasury() {
     if (error) { alert('Erro: ' + error.message); return }
 
     // Marca overdue os que ja venceram
-    const today = new Date().toISOString().split('T')[0]
+    const today = hojeISO()
     if (dueDateStr < today) {
       await supabase.from('payments').update({ status: 'overdue' })
         .eq('reference_month', currentMonth).eq('status', 'pending').lt('due_date', today)
@@ -107,29 +108,34 @@ export default function Treasury() {
   }
 
   async function markAsPaid(paymentId, method = 'pix') {
-    const today = new Date().toISOString().split('T')[0]
-    await supabase.from('payments').update({
+    const today = hojeISO()
+    const { error } = await supabase.from('payments').update({
       status: 'paid',
       paid_date: today,
       payment_method: method,
     }).eq('id', paymentId)
+    // Sem esta checagem a tela recarregava igual quando a gravacao falhava, e
+    // a mensalidade aparecia como quitada sem ter sido registrada.
+    if (error) { alert('Nao foi possivel dar baixa: ' + error.message); return }
     loadAll()
   }
 
   async function markAsUnpaid(paymentId, due) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = hojeISO()
     const newStatus = due < today ? 'overdue' : 'pending'
-    await supabase.from('payments').update({
+    const { error } = await supabase.from('payments').update({
       status: newStatus,
       paid_date: null,
       payment_method: null,
     }).eq('id', paymentId)
+    if (error) { alert('Nao foi possivel estornar: ' + error.message); return }
     loadAll()
   }
 
   async function deletePayment(paymentId) {
     if (!confirm('Excluir esta cobranca?')) return
-    await supabase.from('payments').delete().eq('id', paymentId)
+    const { error } = await supabase.from('payments').delete().eq('id', paymentId)
+    if (error) { alert('Nao foi possivel excluir: ' + error.message); return }
     loadAll()
   }
 
@@ -533,7 +539,7 @@ function AddPaymentForm({ players, currentMonth, onClose, onSaved }) {
     if (!playerId || !amount) return
     setSaving(true)
     const [year, month] = currentMonth.split('-').map(Number)
-    const dueDate = new Date(year, month - 1, 5).toISOString().split('T')[0]
+    const dueDate = dataISO(new Date(year, month - 1, 5))
     const { error } = await supabase.from('payments').insert({
       player_id: playerId,
       amount: parseFloat(amount),
@@ -582,16 +588,18 @@ function FeesPane({ pitchFees, onReload }) {
   const [showAdd, setShowAdd] = useState(false)
 
   async function markPaid(id) {
-    await supabase.from('pitch_fees').update({
+    const { error } = await supabase.from('pitch_fees').update({
       paid: true,
-      paid_date: new Date().toISOString().split('T')[0]
+      paid_date: hojeISO()
     }).eq('id', id)
+    if (error) { alert('Nao foi possivel dar baixa na taxa: ' + error.message); return }
     onReload()
   }
 
   async function deleteFee(id) {
     if (!confirm('Excluir esta taxa?')) return
-    await supabase.from('pitch_fees').delete().eq('id', id)
+    const { error } = await supabase.from('pitch_fees').delete().eq('id', id)
+    if (error) { alert('Nao foi possivel excluir a taxa: ' + error.message); return }
     onReload()
   }
 
