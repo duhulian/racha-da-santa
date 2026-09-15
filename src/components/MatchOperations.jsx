@@ -142,38 +142,67 @@ export default function MatchOperations({ onStartLive }) {
     const { data: oldTeams } = await supabase.from('teams').select('id').eq('match_id', matchId)
     if (oldTeams) {
       for (const t of oldTeams) await supabase.from('team_players').delete().eq('team_id', t.id)
-      await supabase.from('teams').delete().eq('match_id', matchId)
+      // Se a limpeza falhar e o sorteio seguir, o racha fica com os times
+      // antigos e os novos ao mesmo tempo.
+      const { error: limpaErr } = await supabase.from('teams').delete().eq('match_id', matchId)
+      if (limpaErr) {
+        alert('Nao foi possivel limpar o sorteio anterior: ' + limpaErr.message)
+        return
+      }
     }
 
+    // Os times antigos ja foram apagados acima. Se a criacao falhar sem ser
+    // checada, o racha fica sem time nenhum e o erro so aparece como tela
+    // vazia, entao cada passo aborta com aviso em vez de seguir adiante.
     const names = ['Alpha', 'Bravo', 'Charlie', 'Delta']
     for (let t = 0; t < numTeams; t++) {
       if (teams[t].length === 0) continue
-      const { data: team } = await supabase.from('teams').insert({
+      const { data: team, error: teamErr } = await supabase.from('teams').insert({
         match_id: matchId,
         name: `Team ${names[t]}`,
       }).select().single()
-      await supabase.from('team_players').insert(
+      if (teamErr || !team) {
+        alert(`Falha ao criar o Team ${names[t]}: ${teamErr?.message || 'sem retorno'}. Sorteie de novo.`)
+        return
+      }
+      const { error: tpErr } = await supabase.from('team_players').insert(
         teams[t].map(pid => ({ team_id: team.id, player_id: pid }))
       )
+      if (tpErr) {
+        alert(`Falha ao escalar o Team ${names[t]}: ${tpErr.message}. Sorteie de novo.`)
+        return
+      }
     }
 
     if (waitlist.length > 0) {
-      const { data: w } = await supabase.from('teams').insert({
+      const { data: w, error: wErr } = await supabase.from('teams').insert({
         match_id: matchId,
         name: 'Lista de Espera',
       }).select().single()
-      await supabase.from('team_players').insert(
+      if (wErr || !w) {
+        alert('Times criados, mas a lista de espera falhou: ' + (wErr?.message || 'sem retorno'))
+        return
+      }
+      const { error: wpErr } = await supabase.from('team_players').insert(
         waitlist.map(pid => ({ team_id: w.id, player_id: pid }))
       )
+      if (wpErr) {
+        alert('Times criados, mas a lista de espera falhou: ' + wpErr.message)
+        return
+      }
     }
 
-    await supabase.from('matches').update({ status: 'sorted' }).eq('id', matchId)
+    const { error: statusErr } = await supabase.from('matches').update({ status: 'sorted' }).eq('id', matchId)
+    if (statusErr) {
+      alert('Times criados, mas o racha nao mudou para sorteado: ' + statusErr.message)
+    }
     load()
   }
 
   async function deleteMatch(matchId) {
     if (!confirm('Excluir este racha e todos os dados associados?')) return
-    await supabase.from('matches').delete().eq('id', matchId)
+    const { error } = await supabase.from('matches').delete().eq('id', matchId)
+    if (error) { alert('Nao foi possivel excluir o racha: ' + error.message); return }
     load()
   }
 

@@ -145,10 +145,15 @@ export default function LiveMatchControl({ matchId, onClose }) {
       return
     }
 
-    await supabase.from('match_live_state').update({
+    const { error: stateErr } = await supabase.from('match_live_state').update({
       current_game_id: game.id,
       game_started_at: new Date().toISOString(),
     }).eq('match_id', matchId)
+    if (stateErr) {
+      alert('O jogo foi criado, mas o estado ao vivo nao registrou: ' + stateErr.message)
+      setSaving(false)
+      return
+    }
 
     setCurrentGame(game)
     setCurrentGoals([])
@@ -191,7 +196,7 @@ export default function LiveMatchControl({ matchId, onClose }) {
       }
     }
 
-    await supabase.from('games').update({
+    const { error: gameErr } = await supabase.from('games').update({
       score_a: scoreA,
       score_b: scoreB,
       winner_team_id: winner,
@@ -200,8 +205,17 @@ export default function LiveMatchControl({ matchId, onClose }) {
       duration_seconds: elapsedSeconds,
     }).eq('id', currentGame.id)
 
+    if (gameErr) {
+      alert('Nao foi possivel encerrar o jogo: ' + gameErr.message)
+      setSaving(false)
+      return
+    }
+
     if (currentGoals.length > 0) {
-      await supabase.from('game_goals').insert(
+      // Se os gols falharem depois do placar salvo, o jogo fica com o resultado
+      // certo e sem artilheiro, e o encerramento do matchday calcula as
+      // estatisticas erradas. Por isso avisa em vez de seguir calado.
+      const { error: goalsErr } = await supabase.from('game_goals').insert(
         currentGoals.map(g => ({
           game_id: currentGame.id,
           team_id: g.teamId,
@@ -210,6 +224,11 @@ export default function LiveMatchControl({ matchId, onClose }) {
           minute: g.minute,
         }))
       )
+      if (goalsErr) {
+        alert('Placar salvo, mas os gols deste jogo nao foram gravados: ' + goalsErr.message)
+        setSaving(false)
+        return
+      }
     }
 
     // Atualiza fila: vencedor vai pro topo, perdedor pro fim
@@ -225,11 +244,18 @@ export default function LiveMatchControl({ matchId, onClose }) {
     // Perdedor vai pro fim
     newQueue.push(loser)
 
-    await supabase.from('match_live_state').update({
+    // A fila e a fonte de quem entra no proximo jogo. Se este update falhar em
+    // silencio, a tela zera o jogo atual e a fila do banco fica na ordem antiga.
+    const { error: queueErr } = await supabase.from('match_live_state').update({
       current_game_id: null,
       team_queue: newQueue,
       game_started_at: null,
     }).eq('match_id', matchId)
+    if (queueErr) {
+      alert('Jogo salvo, mas a fila de times nao foi atualizada: ' + queueErr.message)
+      setSaving(false)
+      return
+    }
 
     setCurrentGame(null)
     setCurrentGoals([])
@@ -266,8 +292,15 @@ export default function LiveMatchControl({ matchId, onClose }) {
       }
     })
 
-    // Limpa stats antigas
-    await supabase.from('match_stats').delete().eq('match_id', matchId)
+    // Limpa stats antigas. A partir daqui cada passo e checado: o delete ja
+    // aconteceu, entao seguir apos uma falha deixaria o racha marcado como
+    // encerrado e sem nenhuma estatistica, sem aviso nenhum.
+    const { error: delErr } = await supabase.from('match_stats').delete().eq('match_id', matchId)
+    if (delErr) {
+      alert('Nao foi possivel limpar as estatisticas anteriores: ' + delErr.message)
+      setSaving(false)
+      return
+    }
 
     const rows = Object.entries(playerTotals).map(([pid, s]) => ({
       match_id: matchId,
@@ -276,7 +309,14 @@ export default function LiveMatchControl({ matchId, onClose }) {
       assists: s.assists,
       present: s.present,
     }))
-    if (rows.length > 0) await supabase.from('match_stats').insert(rows)
+    if (rows.length > 0) {
+      const { error: statsErr } = await supabase.from('match_stats').insert(rows)
+      if (statsErr) {
+        alert('As estatisticas do racha nao foram gravadas: ' + statsErr.message + '. O racha continua aberto, tente encerrar de novo.')
+        setSaving(false)
+        return
+      }
+    }
 
     // Campeao: lider da mesma classificacao que aparece na tela do racha.
     // Contar so winner_team_id ignorava saldo de gols e podia coroar um time
@@ -285,10 +325,22 @@ export default function LiveMatchControl({ matchId, onClose }) {
     const champId = championTeamId(regular, games)
 
     for (const t of regular) {
-      await supabase.from('teams').update({ won: t.id === champId }).eq('id', t.id)
+      const { error: wonErr } = await supabase.from('teams').update({ won: t.id === champId }).eq('id', t.id)
+      if (wonErr) {
+        alert('Estatisticas gravadas, mas o time campeao nao foi marcado: ' + wonErr.message)
+        setSaving(false)
+        return
+      }
     }
 
-    await supabase.from('matches').update({ status: 'finished' }).eq('id', matchId)
+    const { error: finishErr } = await supabase.from('matches').update({ status: 'finished' }).eq('id', matchId)
+    if (finishErr) {
+      alert('Estatisticas gravadas, mas o racha nao foi marcado como finalizado: ' + finishErr.message)
+      setSaving(false)
+      return
+    }
+
+    // So descarta o estado ao vivo depois que todo o resto deu certo.
     await supabase.from('match_live_state').delete().eq('match_id', matchId)
 
     setSaving(false)
@@ -299,7 +351,11 @@ export default function LiveMatchControl({ matchId, onClose }) {
   async function discardCurrentGame() {
     if (!currentGame) return
     if (!confirm('Descartar este jogo? Gols nao serao salvos.')) return
-    await supabase.from('games').delete().eq('id', currentGame.id)
+    const { error: discardErr } = await supabase.from('games').delete().eq('id', currentGame.id)
+    if (discardErr) {
+      alert('Nao foi possivel descartar o jogo: ' + discardErr.message)
+      return
+    }
     await supabase.from('match_live_state').update({
       current_game_id: null,
       game_started_at: null,

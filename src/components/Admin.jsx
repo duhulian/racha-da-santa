@@ -457,15 +457,25 @@ function HistoryTab() {
     }).select().single()
     if (!match) { setSaving(false); alert('Erro'); return }
 
-    await supabase.from('confirmations').insert(Object.keys(selectedPlayers).map(pid => ({
+    // O racha ja foi criado acima. Se as linhas seguintes falharem sem aviso,
+    // fica um racha finalizado e vazio, contando zero para todo mundo.
+    const { error: confErr } = await supabase.from('confirmations').insert(Object.keys(selectedPlayers).map(pid => ({
       match_id: match.id, player_id: pid, status: 'confirmed',
     })))
-    await supabase.from('match_stats').insert(Object.entries(selectedPlayers).map(([pid, s]) => ({
+    if (confErr) {
+      alert('Racha criado, mas as presencas nao foram gravadas: ' + confErr.message)
+      setSaving(false); return
+    }
+    const { error: statsErr } = await supabase.from('match_stats').insert(Object.entries(selectedPlayers).map(([pid, s]) => ({
       match_id: match.id, player_id: pid,
       goals: parseInt(s.goals) || 0,
       assists: parseInt(s.assists) || 0,
       present: true,
     })))
+    if (statsErr) {
+      alert('Racha criado, mas gols e assistencias nao foram gravados: ' + statsErr.message)
+      setSaving(false); return
+    }
 
     setDate(''); setSelectedPlayers({}); setSaving(false)
     setSuccess('Racha importado com sucesso!')

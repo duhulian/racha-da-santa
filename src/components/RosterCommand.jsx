@@ -56,19 +56,22 @@ export default function RosterCommand() {
   }
 
   async function promoteToMensalista(pid) {
-    await supabase.from('players').update({ player_type: 'mensalista', role: 'player' }).eq('id', pid)
+    const { error } = await supabase.from('players').update({ player_type: 'mensalista', role: 'player' }).eq('id', pid)
+    if (error) { alert('Nao foi possivel promover: ' + error.message); return }
     load()
   }
 
   async function demoteToGuest(pid) {
     if (!confirm('Rebaixar para pool de convidados? Ele continua ativo mas nao tem cobranca de mensalidade automatica.')) return
-    await supabase.from('players').update({ player_type: 'avulso', role: 'guest' }).eq('id', pid)
+    const { error } = await supabase.from('players').update({ player_type: 'avulso', role: 'guest' }).eq('id', pid)
+    if (error) { alert('Nao foi possivel rebaixar: ' + error.message); return }
     load()
   }
 
   async function deactivate(pid) {
     if (!confirm('Desativar este jogador? Ele some do elenco mas historico e preservado.')) return
-    await supabase.from('players').update({ active: false }).eq('id', pid)
+    const { error } = await supabase.from('players').update({ active: false }).eq('id', pid)
+    if (error) { alert('Nao foi possivel desativar: ' + error.message); return }
     load()
   }
 
@@ -80,14 +83,9 @@ export default function RosterCommand() {
       const timestamp = Date.now()
       const fileName = `${playerId}_${timestamp}.jpg`
 
-      const { data: existing } = await supabase.storage.from('avatars').list('', { limit: 1000 })
-      if (existing) {
-        const toDelete = existing
-          .filter(f => f.name.startsWith(`${playerId}.`) || f.name.startsWith(`${playerId}_`))
-          .map(f => f.name)
-        if (toDelete.length > 0) await supabase.storage.from('avatars').remove(toDelete)
-      }
-
+      // Sobe a nova antes de apagar as antigas. Na ordem inversa, um upload que
+      // falhasse deixava o jogador sem foto nenhuma, porque a antiga ja tinha
+      // sido removida. O nome carrega timestamp, entao nao ha colisao.
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, resizedBlob, {
         upsert: true, contentType: 'image/jpeg', cacheControl: '3600',
       })
@@ -98,7 +96,20 @@ export default function RosterCommand() {
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
       const photoUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${fileName}`
-      await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+      const { error: linkError } = await supabase.from('players').update({ photo_url: photoUrl }).eq('id', playerId)
+      if (linkError) {
+        alert('A foto subiu, mas nao foi vinculada ao jogador: ' + linkError.message)
+        setUploadingId(''); return
+      }
+
+      // Limpeza das versoes anteriores, so depois que a nova ja esta valendo.
+      const { data: existing } = await supabase.storage.from('avatars').list('', { limit: 1000 })
+      if (existing) {
+        const toDelete = existing
+          .filter(f => (f.name.startsWith(`${playerId}.`) || f.name.startsWith(`${playerId}_`)) && f.name !== fileName)
+          .map(f => f.name)
+        if (toDelete.length > 0) await supabase.storage.from('avatars').remove(toDelete)
+      }
     } catch (err) {
       alert('Erro ao processar foto: ' + err.message)
     }
@@ -356,11 +367,18 @@ function PlayerForm({ editing, onSaved, onCancel, show, onOpen }) {
       physical: parseInt(physical),
       monthly_fee: parseFloat(monthlyFee) || 50,
     }
-    if (editing) {
-      await supabase.from('players').update(data).eq('id', editing.id)
-    } else {
-      await supabase.from('players').insert({ ...data, player_type: 'mensalista', role: 'player' })
+    const { error } = editing
+      ? await supabase.from('players').update(data).eq('id', editing.id)
+      : await supabase.from('players').insert({ ...data, player_type: 'mensalista', role: 'player' })
+
+    // Sem esta checagem o formulario fechava mesmo com a gravacao falhando, e
+    // o que foi digitado se perdia sem aviso.
+    if (error) {
+      alert('Nao foi possivel salvar o jogador: ' + error.message)
+      setSaving(false)
+      return
     }
+
     resetForm()
     setSaving(false)
     onSaved()

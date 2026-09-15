@@ -364,19 +364,22 @@ function QuickEntryCard({ players, onSaved }) {
     // Upsert: se ja tem stat desse player neste match, soma
     const { data: existing } = await supabase.from('match_stats')
       .select('*').eq('match_id', matchId).eq('player_id', playerId).maybeSingle()
-    if (existing) {
-      await supabase.from('match_stats').update({
-        goals: (existing.goals || 0) + parseInt(goals),
-        assists: (existing.assists || 0) + parseInt(assists),
-      }).eq('id', existing.id)
-    } else {
-      await supabase.from('match_stats').insert({
-        match_id: matchId,
-        player_id: playerId,
-        goals: parseInt(goals),
-        assists: parseInt(assists),
-        present: true,
-      })
+    const { error } = existing
+      ? await supabase.from('match_stats').update({
+          goals: (existing.goals || 0) + parseInt(goals),
+          assists: (existing.assists || 0) + parseInt(assists),
+        }).eq('id', existing.id)
+      : await supabase.from('match_stats').insert({
+          match_id: matchId,
+          player_id: playerId,
+          goals: parseInt(goals),
+          assists: parseInt(assists),
+          present: true,
+        })
+    if (error) {
+      alert('Nao foi possivel lancar a estatistica: ' + error.message)
+      setSaving(false)
+      return
     }
     setGoals(0); setAssists(0); setPlayerId('')
     setSaving(false)

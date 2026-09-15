@@ -144,6 +144,15 @@ A tela recarregava do mesmo jeito mesmo quando a gravacao falhava, entao a cobra
 parecia quitada sem ter sido registrada. Agora, se a baixa falhar, aparece um aviso com
 o motivo e nada e dado como pago por engano.
 
+**Sumiu a foto de um jogador depois de tentar trocar. (corrigido em 15/09/2026)**
+A troca apagava a foto antiga antes de subir a nova, entao um erro no meio deixava o
+jogador sem foto. Agora a nova sobe primeiro e a antiga so sai depois que a nova esta
+valendo.
+
+**Salvei um jogador e o cadastro nao apareceu. (corrigido em 15/09/2026)**
+O formulario fechava mesmo quando a gravacao falhava. Agora, se falhar, o formulario
+continua aberto com o que voce digitou e aparece o motivo.
+
 **Paguei a noite e a data ficou do dia seguinte. (corrigido em 15/09/2026)**
 Baixas feitas depois das 21h eram gravadas com a data do dia seguinte. A data agora
 segue o horario de quem esta usando o app. Registros antigos nao foram alterados.
@@ -177,14 +186,11 @@ src/components/Confirm.jsx           pagina publica de confirmacao
 src/components/Home.jsx              inicio
 src/components/Layout.jsx            cabecalho e menu inferior
 src/components/LiveMatchControl.jsx  controle do racha ao vivo
-src/components/Login.jsx             NAO USADO, desenho antigo
-src/components/MatchDay.jsx          NAO USADO, desenho antigo
 src/components/MatchDetail.jsx       sumula do racha
 src/components/MatchList.jsx         historico de partidas
 src/components/MatchOperations.jsx   operacao dos rachas
 src/components/PlayerProfile.jsx     perfil do jogador
 src/components/Players.jsx           elenco
-src/components/Profile.jsx           NAO USADO, desenho antigo
 src/components/Rankings.jsx          rankings por periodo
 src/components/RosterCommand.jsx     gestao do elenco
 src/components/Treasury.jsx          financeiro
@@ -196,6 +202,7 @@ src/lib/standings.test.mjs           check da regra de pontuacao
 src/lib/supabase.js                  cliente do Supabase
 src/main.jsx
 supabase_v10_migration.sql
+supabase_v11_seguranca.sql           correcoes de seguranca aplicadas no banco
 supabase_v2.sql                      schema base (APAGA TUDO, so em ambiente novo)
 supabase_v9_migration.sql
 tailwind.config.js

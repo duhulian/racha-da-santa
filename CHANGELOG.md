@@ -8,6 +8,151 @@ descreve a release v10.
 
 ---
 
+## 2026-09-15, varredura de pendencias
+
+### Pedido
+
+"pode fazer tudo e publicar, deixar ele no ar ja". Autorizacao para fechar as
+pendencias em aberto e publicar.
+
+### Feito, no banco
+
+- **Bucket de fotos** (aplicado antes, nesta mesma data): policies passaram a exigir
+  `role = 'admin'` para upload, update e delete. Leitura segue publica.
+- **`search_path` fixo** em `public.mark_overdue_payments()` e
+  `public.update_updated_at()`. Migration `fixa_search_path_das_funcoes`.
+- **EXECUTE publico revogado** em `public.rls_auto_enable()`. Migration
+  `revoga_execute_publico_rls_auto_enable`.
+- Criado `supabase_v11_seguranca.sql` para o repositorio refletir o que foi aplicado.
+
+### Feito, no codigo
+
+Tratamento de erro nas escritas onde falha silenciosa causava perda de dado ou estado
+inconsistente. Eram 32 escritas sem verificacao, sobraram 8, todas de limpeza ou de
+valor derivado.
+
+- **`MatchOperations.sortTeams`**: os times antigos sao apagados antes dos novos serem
+  criados. Se o insert falhasse, `team` vinha `null`, estourava em `team.id` e o racha
+  ficava sem time nenhum. Cada passo passou a abortar com aviso.
+- **`LiveMatchControl.finishCurrentGame`**: se o insert em `game_goals` falhasse depois
+  do placar salvo, o jogo ficava com resultado e sem artilheiro, e o encerramento
+  calculava estatistica errada.
+- **`LiveMatchControl.finalizeMatchday`**: `match_stats` e apagado antes de ser
+  reinserido. Uma falha no meio deixava o racha marcado como finalizado e sem nenhuma
+  estatistica. Agora aborta antes de marcar finalizado, e o estado ao vivo so e
+  descartado depois que todo o resto deu certo.
+- **`RosterCommand.handlePhotoUpload`**: apagava as fotos antigas antes de subir a nova,
+  entao um upload que falhasse deixava o jogador sem foto nenhuma. A ordem foi
+  invertida, a limpeza acontece depois que a nova ja esta valendo.
+- **`RosterCommand.savePlayer`**: o formulario fechava mesmo com a gravacao falhando, e
+  o que foi digitado se perdia.
+- **`Admin` importar historico**: podia deixar um racha finalizado e vazio.
+- Tambem tratados: promover, rebaixar e desativar jogador, lancamento avulso de
+  estatistica, exclusao de racha, descarte de jogo e atualizacao da fila de times.
+
+### Removido
+
+`src/components/Login.jsx`, `src/components/MatchDay.jsx` e
+`src/components/Profile.jsx`. Eram do desenho anterior, nenhum import apontava para
+eles, verificado por varredura. O build seguiu passando depois da remocao, o que
+confirma que estavam mortos. Recuperaveis pelo historico do Git.
+
+### Decisoes
+
+- **Nao mexi no corpo de `rls_auto_enable`.** Testei a chamada no proprio banco e o
+  Postgres respondeu `trigger functions can only be called as triggers`. O alerta do
+  linter era real como configuracao e inofensivo como risco. Revoguei o EXECUTE porque
+  e o que o proprio linter recomenda e nao custa nada, depois de confirmar que o event
+  trigger continua ativo.
+- **Nao tratei as 8 escritas restantes.** Sao limpeza que roda depois do caminho critico
+  ja ter dado certo, ou valor derivado e recalculavel, como o update que marca `overdue`.
+  Tratar todas por simetria inflaria o diff sem reduzir risco.
+- **Mantive `alert()`.** E o padrao do projeto inteiro. Trocar por toast seria
+  refatoracao de interface misturada com correcao de defeito.
+- **Nao mexi no code splitting.** O bundle passa de 500 kB e o Vite avisa, mas nao ha
+  medicao de problema real de carregamento. Otimizar sem medir e chute.
+
+### Validacao executada
+
+- `npm test`: passa, `standings: ok` e `datas: ok`.
+- `npm run build`: passa, 1.632 modulos, inclusive depois de remover os tres orfaos.
+- Estado do banco conferido apos as migrations: `anon` e `authenticated` sem EXECUTE em
+  `rls_auto_enable`, event trigger ainda ativo (1), e as duas funcoes com `search_path`
+  fixo (2 de 2).
+- `get_advisors` de seguranca: os dois alertas de `search_path` mutavel sairam.
+
+### Nao validado
+
+- Nenhum dos fluxos corrigidos foi exercitado em runtime. Todos exigem operar o racha
+  ao vivo, sortear times ou mexer em cobranca no banco de producao. As correcoes sao de
+  caminho de falha: para prova-las seria preciso forcar a falha do Supabase.
+- A protecao contra senha vazada continua desligada. Nao ha como ligar por SQL, e so
+  pelo painel do Supabase em Authentication > Policies.
+
+### Pendente
+
+- Habilitar a protecao contra senha vazada no painel (um clique, fora do alcance daqui).
+- 1 conta em `auth.users` sem `player` correspondente, e 1 player com `role = 'admin'` e
+  `user_id` nulo. Nao mexi: sao dados, e apagar conta sem saber de quem e nao cabe a mim.
+- 8 escritas de limpeza seguem sem verificacao, por decisao registrada acima.
+
+### Riscos
+
+- A remocao dos tres componentes e definitiva no diretorio de trabalho, mas continua no
+  historico do Git e pode ser restaurada com `git checkout`.
+- As novas mensagens de erro usam `alert`, entao aparecem como caixa do navegador.
+
+### Estrutura do projeto apos esta sessao
+
+```
+.gitignore
+CHANGELOG.md
+MANUAL-DO-USUARIO.md
+README.md
+index.html
+package-lock.json
+package.json
+postcss.config.js
+public/favicon.svg
+public/icon-192.png
+public/icon-512.png
+public/logo.png
+public/manifest.json
+public/sw.js
+src/App.jsx
+src/components/Admin.jsx
+src/components/AdminLogin.jsx
+src/components/CommandCenter.jsx
+src/components/Confirm.jsx
+src/components/Home.jsx
+src/components/Layout.jsx
+src/components/LiveMatchControl.jsx
+src/components/MatchDetail.jsx
+src/components/MatchList.jsx
+src/components/MatchOperations.jsx
+src/components/PlayerProfile.jsx
+src/components/Players.jsx
+src/components/Rankings.jsx
+src/components/RosterCommand.jsx
+src/components/Treasury.jsx
+src/index.css
+src/lib/datas.js
+src/lib/datas.test.mjs
+src/lib/standings.js
+src/lib/standings.test.mjs
+src/lib/supabase.js
+src/main.jsx
+supabase_v10_migration.sql
+supabase_v11_seguranca.sql
+supabase_v2.sql
+supabase_v9_migration.sql
+tailwind.config.js
+vercel.json
+vite.config.js
+```
+
+---
+
 ## 2026-09-15, revisao de producao
 
 ### Pedido
